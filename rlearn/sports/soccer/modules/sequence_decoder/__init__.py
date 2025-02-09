@@ -1,0 +1,2 @@
+from rlearn.sports.soccer.modules.sequence_decoder.huggingface_gpt2_decoder import HuggingfaceGPT2Decoder
+from rlearn.sports.soccer.modules.sequence_decoder.sequence_decoder import SequenceDecoder
