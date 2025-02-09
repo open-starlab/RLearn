@@ -40,7 +40,7 @@ dependencies = [
     "scipy==1.15.1",
     "torch==2.6.0",
     "torchmetrics==1.0.2",
-    "tqdm"
+    "tqdm",
 ]
 
 license = { text = "Apache License 2.0" }
