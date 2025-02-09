@@ -8,10 +8,6 @@ The OpenSTARLab RLearn package is the fundamental package for Reinforcement Lear
 This package is continuously evolving to support future OpenSTARLab projects. If you have any suggestions or encounter any bugs, please feel free to open an issue.
 
 ## Installation
-- Install [pytorch](https://pytorch.org/get-started/locally/) (recommended version 2.4.0 linux pip python3.8 cuda12.1)
-```
-pip install torch torchvision torchaudio
-```
 - To install this package via PyPI
 ```
 pip install openstarlab-rlearn
@@ -27,15 +23,11 @@ pip install -e .
 ### Sports
 - [RLearn Model in Football/Soccer ⚽](https://openstarlab.readthedocs.io/en/latest/RLearn_Modeling/Sports/Soccer/index.html)
 
+
 ## RoadMap
 - [x] Release the package
-- [ ] Provide pre-trained models
+- [ ] Incorporate more functions
 
-## Other Information
-Development torch version
-```
-version 2.4.0 linux pip python3.8 cuda12.1 
-```
 
 ## Developer
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
