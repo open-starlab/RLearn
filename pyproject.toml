@@ -40,11 +40,10 @@ dependencies = [
     "scipy==1.15.1",
     "torch==2.6.0",
     "torchmetrics==1.0.2",
-    "tqdm",
+    "tqdm"
 ]
 
-license = { text = "Apache-2.0" }
-license-files = ["LICEN[CS]E*"]
+license = { text = "Apache License 2.0" }
 
 [tool.setuptools.packages.find]
 where = ["."]
