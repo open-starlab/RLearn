@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openstarlab_rlearn"
-version = "0.1.20"
+version = "0.1.22"
 description = "openstarlab rlearn modeliing package"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -37,10 +37,13 @@ dependencies = [
     "pydantic==2.10.6",
     "pytorch-lightning==2.0.6",
     "scikit-learn==1.6.1",
-    "scipy==1.15.1",
+    "scipy<1.14.0",
     "torch==2.6.0",
     "torchmetrics==1.0.2",
     "tqdm",
+    "cloudpickle>=3.0.0",
+    "importlib-metadata>=6.0,<8.5",
+    "packaging>=23.0", 
 ]
 
 license = { text = "Apache License 2.0" }
