@@ -8,6 +8,10 @@ The OpenSTARLab RLearn package is the fundamental package for Reinforcement Lear
 This package is continuously evolving to support future OpenSTARLab projects. If you have any suggestions or encounter any bugs, please feel free to open an issue.
 
 ## Installation
+- Install [pytorch](https://pytorch.org/get-started/locally/) (recommended version 2.4.0 linux pip python3.10 cuda12.6)
+```
+pip install torch
+```
 - To install this package via PyPI
 ```
 pip install openstarlab-rlearn
