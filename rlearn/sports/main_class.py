@@ -12,7 +12,7 @@ if __name__ == '__main__':
     RLearn_Model(
         input_path=os.getcwd()+'/tests/data/datastadium/',
         output_path=os.getcwd()+'/tests/data/datastadium/split/'
-    ).train_test_split()
+    ).split_train_test()
 
     # test preprocess observation data
     RLearn_Model(

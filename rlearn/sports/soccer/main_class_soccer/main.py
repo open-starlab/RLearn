@@ -29,7 +29,7 @@ class rlearn_model_soccer:
     def __init__(self, model_name=None, config=None, 
                 seed=42, num_process=4, input_path=None, output_path=None,
                 ):
-        self.model_name = model_name   
+        self.model_name = model_name
         self.config = config
         self.seed = seed
         self.num_process = num_process
@@ -37,7 +37,7 @@ class rlearn_model_soccer:
         self.output_path = output_path
 
         
-    def train_test_split(self):
+    def split_train_test(self):
         # Load data into a Dataset
         game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if re.match(r"\d{7}", p.name)]
         train_game_ids, test_val_game_ids = train_test_split(game_ids, test_size=0.5, random_state=self.seed)
@@ -387,7 +387,7 @@ if __name__ == '__main__':
     # rlearn_model_soccer(
     #     input_path=os.getcwd()+'/tests/data/datastadium/',
     #     output_path=os.getcwd()+'/tests/data/datastadium/split/'
-    # ).train_test_split()
+    # ).split_train_test()
 
 
     # # preprocess observation
