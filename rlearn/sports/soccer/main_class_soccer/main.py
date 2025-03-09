@@ -26,11 +26,13 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 class rlearn_model_soccer:
-    def __init__(self, model_name=None, config=None, 
+    def __init__(self, model_name=None, config=None, league='jleague', state_def='PVF',
                 seed=42, num_process=4, input_path=None, output_path=None,
                 ):
         self.model_name = model_name
         self.config = config
+        self.league = league
+        self.state_def = state_def
         self.seed = seed
         self.num_process = num_process
         self.input_path = input_path
@@ -39,7 +41,10 @@ class rlearn_model_soccer:
         
     def split_train_test(self):
         # Load data into a Dataset
-        game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if re.match(r"\d{7}", p.name)]
+        if self.league == 'laliga':
+            game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if re.match(r"\d{7}", p.name)]
+        elif self.league == 'jleague':
+            game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if re.match(r"\d{10}", p.name)]
         train_game_ids, test_val_game_ids = train_test_split(game_ids, test_size=0.5, random_state=self.seed)
         test_game_ids, val_game_ids = train_test_split(test_val_game_ids, test_size=0.1, random_state=self.seed)
 
