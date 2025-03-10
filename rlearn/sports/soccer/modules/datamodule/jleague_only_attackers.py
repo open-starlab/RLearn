@@ -8,7 +8,8 @@ import torch
 from datasets import load_from_disk
 
 from rlearn.sports.soccer.dataclass import (
-    SimpleObservation,
+    SimpleObservation_PVF,
+    SimpleObservation_EDMF
 )
 from rlearn.sports.soccer.modules.datamodule.datamodule import DataModule
 from rlearn.sports.soccer.modules.state_action_tokenizer.state_action_tokenizer import StateActionTokenizerBase
@@ -49,6 +50,7 @@ class JLeagueRLAttackerDataModule(DataModule):
     def preprocess_data(
         cls,
         dataset: torch.utils.data.Dataset,
+        state_def: str,
         state_action_tokenizer: Dict[str, Any],
         num_workers: int = 8,
         preprocess_batch_size: int = 32,
@@ -59,12 +61,12 @@ class JLeagueRLAttackerDataModule(DataModule):
             batched=True,
             num_proc=num_workers,
             batch_size=preprocess_batch_size,
-            fn_kwargs={"state_action_tokenizer": state_action_tokenizer},
+            fn_kwargs={"state_action_tokenizer": state_action_tokenizer, "state_def": state_def},
         )
         return dataset
 
     @classmethod
-    def _preprocess_data(cls, examples, state_action_tokenizer: StateActionTokenizerBase) -> Dict[str, torch.Tensor]:
+    def _preprocess_data(cls, examples, state_action_tokenizer: StateActionTokenizerBase, state_def: str) -> Dict[str, torch.Tensor]:
         observation_in_examples = []
         action_in_examples = []
         reward_in_examples = []
@@ -79,7 +81,11 @@ class JLeagueRLAttackerDataModule(DataModule):
                 assert type(observation) == dict, f"observation is not dict: {observation}"
                 assert type(action) == str, f"action is not str: {action}"
                 assert type(reward) == float, f"reward is not float: {reward}"
-                observation_in_example.append(SimpleObservation.from_dict(observation).to_tensor())
+                if state_def == "EDMF" or state_def == "EDMF_max":
+                    direction = 1 if state_def == "EDMF_max" else 8
+                    observation_in_example.append(SimpleObservation_EDMF.from_dict(observation).to_tensor(direction))
+                elif state_def == 'PVF':
+                    observation_in_example.append(SimpleObservation_PVF.from_dict(observation).to_tensor())
                 if action in {"ball_recovery", "interception", "clearance", "pressure", "block"}:
                     action = "defensive_action"
                 elif action == "goal":

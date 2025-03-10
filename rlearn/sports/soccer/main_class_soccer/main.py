@@ -281,13 +281,13 @@ class rlearn_model_soccer:
         logger.info("Preprocessing dataset...")
         start = time.time()
         train_dataset = DataModule.by_name(exp_config['datamodule']['type']).preprocess_data(
-            train_dataset, **exp_config['dataset']['preprocess_config']
+            train_dataset, self.state_def, **exp_config['dataset']['preprocess_config']
         )
         valid_dataset = DataModule.by_name(exp_config['datamodule']['type']).preprocess_data(
-            valid_dataset, **exp_config['dataset']['preprocess_config']
+            valid_dataset, self.state_def, **exp_config['dataset']['preprocess_config']
         )
         test_dataset = DataModule.by_name(exp_config['datamodule']['type']).preprocess_data(
-            test_dataset, **exp_config['dataset']['preprocess_config']
+            test_dataset, self.state_def, **exp_config['dataset']['preprocess_config']
         )
         logger.info(f"Preprocessing dataset is done. {time.time() - start} sec")
         logger.info(f"Train dataset size: {len(train_dataset)}")
@@ -392,7 +392,6 @@ class rlearn_model_soccer:
         test_dataset = DataModule.by_name(exp_config['datamodule']['type']).preprocess_data(
             test_dataset, **exp_config['dataset']['preprocess_config']
         )
-
 
         # unique game_ids
         game_ids = set(test_dataset['game_id'])
