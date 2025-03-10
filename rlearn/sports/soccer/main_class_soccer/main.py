@@ -13,7 +13,16 @@ import torch
 from lightning_lite.utilities.seed import seed_everything
 
 
-from ..dataclass import Events, SimpleObservation, SimpleObservationAction, SimpleObservationActionSequence
+from ..dataclass import (
+    Events_PVF,
+    Events_EDMF,
+    SimpleObservation_PVF,
+    SimpleObservation_EDMF,
+    SimpleObservationAction_PVF,
+    SimpleObservationAction_EDMF,
+    SimpleObservationActionSequence_PVF,
+    SimpleObservationActionSequence_EDMF,
+)
 from ..utils.file_utils import load_json, save_formatted_json
 from ..env import OUTPUT_DIR, PROJECT_DIR
 from ..models.q_model_base import QModelBase
@@ -89,10 +98,10 @@ class rlearn_model_soccer:
         logging.info(f"Test: {len(test_dataset)}")
 
     
-    def events2attacker_simple_observation_action_sequence(
+    def events2attacker_simple_observation_action_sequence_PVF(
             self, examples, min_frame_len_threshold: int=30, max_frame_len_threshold: int=500
         )->Dict[str, Any]:
-        events_list = [Events.from_dict(dict(zip(examples, v))) for v in zip(*examples.values())]
+        events_list = [Events_PVF.from_dict(dict(zip(examples, v))) for v in zip(*examples.values())]
         for events in events_list:
             assert (
                 min_frame_len_threshold <= len(events.events) <= max_frame_len_threshold
@@ -116,15 +125,15 @@ class rlearn_model_soccer:
                             f"target_player_id: {target_player_id} not found in game_id: {events.game_id} half: {events.half} seq_id: {events.sequence_id}"
                         )
                         continue
-                    observation = SimpleObservation.from_state(event.state, target_player)
+                    observation = SimpleObservation_PVF.from_state(event.state, target_player)
                     action = target_player.action
-                    observation_action = SimpleObservationAction(
+                    observation_action = SimpleObservationAction_PVF(
                         player=target_player, observation=observation, action=action, reward=event.reward
                     )
                     attacker_observation_action_sequence_in_event.append(observation_action)
                 attacker_observation_action_sequence.append(attacker_observation_action_sequence_in_event)
         attacker_observation_action_sequence = [
-            SimpleObservationActionSequence(
+            SimpleObservationActionSequence_PVF(
                 game_id=events.game_id,
                 half=events.half,
                 sequence_id=events.sequence_id,
@@ -138,6 +147,97 @@ class rlearn_model_soccer:
             key: [item[key] for item in attacker_observation_action_sequence]
             for key in attacker_observation_action_sequence[0].keys()
         }
+    
+
+    def events2attacker_simple_observation_action_sequence_EDMF(
+        examples, min_frame_len_threshold: int = 30, max_frame_len_threshold: int = 600, state_def: str = "EDMF", num_offball_players: int = 3
+    ) -> Dict[str, Any]:
+        events_list = [Events_EDMF.from_dict(dict(zip(examples, v))) for v in zip(*examples.values())]
+        game_id = events_list[0].game_id
+        sequence_id = events_list[0].sequence_id
+        for events in events_list:
+            assert (
+                min_frame_len_threshold <= len(events.events) <= max_frame_len_threshold
+            ), f"len(events.events): {len(events.events)}"
+        attacker_observation_action_sequence = []
+        for events in events_list:
+            valid_attack_player_ids = [
+                player.player_id
+                for player in events.events[0].state.raw_state.players
+                if player.player_role != "GK" and player.player_id > 0 and player.team_name == events.team_name_attack
+            ]
+            if len(valid_attack_player_ids) != 10:
+                logger.warning(
+                    f"Found only {len(valid_attack_player_ids)} valid attack players in game_id: {events.game_id} half: {events.half} seq_id: {events.sequence_id}"
+                )
+            previous_attack_team = events.team_name_attack
+            onball_list = [0]*len(events.events)
+            attack_action = ['pass', 'dribble', 'shot', 'through_pass', 'cross']
+            last_attack_index = -1
+            for i, event in enumerate(events.events):
+                for player in event.state.raw_state.players:
+                    if player.action in attack_action:
+                        # now team name of attack team
+                        onball_list[i] = 1
+                        current_team = player.team_name
+                        if current_team == previous_attack_team:
+                            for j in range(last_attack_index + 1, i):
+                                onball_list[j] = 1
+                        previous_attack_team = current_team
+                        last_attack_index = i
+                        break
+
+            for number_of_player in range(len(valid_attack_player_ids)):
+                target_player_id = valid_attack_player_ids[number_of_player]
+                attacker_observation_action_sequence_in_event = []
+                onball_flag = 0
+                for number_of_event, event in enumerate(events.events):
+                    target_player = [
+                        player for player in event.state.raw_state.attack_players if player.player_id == target_player_id
+                    ][0]
+                    observation, onball_flag = SimpleObservation_EDMF.from_state(
+                        event.state,
+                        target_player,
+                        number_of_player,
+                        num_offball_players,
+                        onball_list,
+                        number_of_event,
+                        onball_flag,
+                        state_def,
+                        game_id,
+                        sequence_id,
+                    )
+                    action = target_player.action
+                    observation_action = SimpleObservationAction_EDMF(
+                        player=target_player, observation=observation, action=action, reward=event.reward
+                    )
+                    attacker_observation_action_sequence_in_event.append(observation_action)
+                attacker_observation_action_sequence.append(attacker_observation_action_sequence_in_event)
+
+        events_team = [events.team_name_attack for events in events_list]
+        for observation_action_sequence in attacker_observation_action_sequence:
+            if observation_action_sequence[0].observation.ego_player.team_name not in events_team:
+                logger.warning(f"ego player is not attacker: {observation_action_sequence[0].observation.ego_player.team_name}")
+        logger.info(f"len(events_list): {len(events_list)}")
+        logger.info(f'events_list: {events_list[0]}, {events_list[-1]}')
+        attacker_observation_action_sequence = [
+            SimpleObservationActionSequence_EDMF(
+                game_id=events_list[i // 10].game_id,
+                half=events_list[i // 10].half,
+                sequence_id=events_list[i // 10].sequence_id,
+                team_name_attack=events_list[i // 10].team_name_attack,
+                team_name_defense=events_list[i // 10].team_name_defense,
+                sequence=observation_action_sequence,
+            ).to_dict()
+            for i, observation_action_sequence in enumerate(attacker_observation_action_sequence)
+        ]
+        assert (
+            len(attacker_observation_action_sequence) <= len(events_list) * 10
+        ), f"len(attacker_observation_action_sequence): {len(attacker_observation_action_sequence)} (len(events_list): {len(events_list)})"    
+        return {
+            key: [item[key] for item in attacker_observation_action_sequence]
+            for key in attacker_observation_action_sequence[0].keys()
+        }
 
 
     def preprocess_observation(self, batch_size):
@@ -147,7 +247,7 @@ class rlearn_model_soccer:
         dataset = load_from_disk(str(self.input_path))
         logger.info("Length of dataset: {}".format(len(dataset)))
         dataset = dataset.map(
-            self.events2attacker_simple_observation_action_sequence,
+            self.events2attacker_simple_observation_action_sequence_EDMF if "EDMF" in self.state_def else self.events2attacker_simple_observation_action_sequence_PVF,
             batched=True,
             remove_columns=dataset.column_names,
             num_proc=self.num_process,
@@ -157,6 +257,10 @@ class rlearn_model_soccer:
                 "max_frame_len_threshold": config["max_frame_len_threshold"],
             },
         )
+        if "EDMF" in self.state_def:
+            assert(
+                type(dataset["sequence"][0][0]["observation"]["common_state"]["offball_state"]["variation_space"][0]) == list
+            ), f'wrong variation_space type: {type(dataset["sequence"][0][0]["observation"]["common_state"]["offball_state"]["variation_space"][0])}'
         logger.info("Length of dataset after processing: {}".format(len(dataset)))
         dataset.save_to_disk(str(self.output_path))
         logging.info(f"output_path: {self.output_path} (elapsed: {time.time() - start:.2f} sec)")
