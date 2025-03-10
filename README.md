@@ -1,6 +1,7 @@
 # OpenSTARLab Rlearn Modeling package
 [![Documentation Status](https://readthedocs.org/projects/openstarlab/badge/?version=latest)](https://openstarlab.readthedocs.io/en/latest/?badge=latest)
 [![dm](https://img.shields.io/pypi/dm/openstarlab-rlearn)](https://pypi.org/project/openstarlab-rlearn/)
+[![ArXiv](https://img.shields.io/badge/ArXiv-2502.02785-b31b1b?logo=arxiv)](https://arxiv.org/abs/2502.02785)
 
 ## Introduction
 The OpenSTARLab RLearn package is the fundamental package for Reinforcement Learning modeling. It is designed to provide a simple and efficient way to train, inference, and simulate Reinforcement Learning. This package supports the data preprocessed by the OpenSTARLab PreProcessing package.
