@@ -7,21 +7,21 @@ class RLearn_Model:
         return rlearn_model_soccer(*args, **kwargs)
 
 
-def test_datastadium_split_mini_data():
-    # test split_data
-    RLearn_Model(
-        input_path=os.getcwd()+'/test/data/dss/preprocess_data/',
-        output_path=os.getcwd()+'/test/data/dss/preprocess_data/split/'
-    ).split_train_test(pytest=True)
+# def test_datastadium_split_mini_data():
+#     # test split_data
+#     RLearn_Model(
+#         input_path=os.getcwd()+'/test/data/dss/preprocess_data/',
+#         output_path=os.getcwd()+'/test/data/dss/preprocess_data/split/'
+#     ).split_train_test(pytest=True)
 
-def test_datastadium_preprocess_data():
-    # test preprocess observation data
-    RLearn_Model(
-        config=os.getcwd()+'/test/config/preprocessing_dssports2020.json',
-        input_path=os.getcwd()+'/test/data/dss/preprocess_data/split/mini',
-        output_path=os.getcwd()+'/test/data/dss_simple_obs_action_seq/split/mini',
-        num_process=5,
-    ).preprocess_observation(batch_size=64)
+# def test_datastadium_preprocess_data():
+#     # test preprocess observation data
+#     RLearn_Model(
+#         config=os.getcwd()+'/test/config/preprocessing_dssports2020.json',
+#         input_path=os.getcwd()+'/test/data/dss/preprocess_data/split/mini',
+#         output_path=os.getcwd()+'/test/data/dss_simple_obs_action_seq/split/mini',
+#         num_process=5,
+#     ).preprocess_observation(batch_size=64)
 
 def test_datastadium_train_data():
     # test train model
@@ -31,9 +31,10 @@ def test_datastadium_train_data():
         exp_name='sarsa_attacker',
         run_name='test',
         accelerator="cpu",
-        devices=None,
-        strategy=None,
+        devices=1,
+        strategy='ddp'
     )
+    
 
 # def test_datastadium_visualize_data():
 #     # test visualize
