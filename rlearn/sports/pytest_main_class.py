@@ -30,9 +30,9 @@ def test_datastadium_train_data():
     ).train(
         exp_name='sarsa_attacker',
         run_name='test',
-        accelerator="gpu",
-        devices=1,
-        strategy="ddp",
+        accelerator="cpu",
+        devices=None,
+        strategy=None,
     )
 
 # def test_datastadium_visualize_data():
