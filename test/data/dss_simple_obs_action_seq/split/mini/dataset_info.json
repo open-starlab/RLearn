@@ -1,0 +1,242 @@
+{
+  "builder_name": "json",
+  "citation": "",
+  "config_name": "default",
+  "dataset_name": "json",
+  "dataset_size": 9715655,
+  "description": "",
+  "download_checksums": {
+    "/work6/k_ide/open-starlab/RLearn/test/data/dss/preprocess_data/0001/events.jsonl": {
+      "num_bytes": 30141099,
+      "checksum": null
+    }
+  },
+  "download_size": 30141099,
+  "features": {
+    "game_id": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "half": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "sequence_id": {
+      "dtype": "int64",
+      "_type": "Value"
+    },
+    "team_name_attack": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "team_name_defense": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "sequence": [
+      {
+        "action": {
+          "dtype": "string",
+          "_type": "Value"
+        },
+        "observation": {
+          "ball": {
+            "position": {
+              "x": {
+                "dtype": "float64",
+                "_type": "Value"
+              },
+              "y": {
+                "dtype": "float64",
+                "_type": "Value"
+              }
+            },
+            "velocity": {
+              "x": {
+                "dtype": "float64",
+                "_type": "Value"
+              },
+              "y": {
+                "dtype": "float64",
+                "_type": "Value"
+              }
+            }
+          },
+          "ego_player": {
+            "action": {
+              "dtype": "string",
+              "_type": "Value"
+            },
+            "action_probs": {
+              "dtype": "null",
+              "_type": "Value"
+            },
+            "index": {
+              "dtype": "int64",
+              "_type": "Value"
+            },
+            "player_id": {
+              "dtype": "int64",
+              "_type": "Value"
+            },
+            "player_name": {
+              "dtype": "string",
+              "_type": "Value"
+            },
+            "player_role": {
+              "dtype": "string",
+              "_type": "Value"
+            },
+            "position": {
+              "x": {
+                "dtype": "float64",
+                "_type": "Value"
+              },
+              "y": {
+                "dtype": "float64",
+                "_type": "Value"
+              }
+            },
+            "team_name": {
+              "dtype": "string",
+              "_type": "Value"
+            },
+            "velocity": {
+              "x": {
+                "dtype": "float64",
+                "_type": "Value"
+              },
+              "y": {
+                "dtype": "float64",
+                "_type": "Value"
+              }
+            }
+          },
+          "players": [
+            {
+              "action": {
+                "dtype": "string",
+                "_type": "Value"
+              },
+              "action_probs": {
+                "dtype": "null",
+                "_type": "Value"
+              },
+              "index": {
+                "dtype": "int64",
+                "_type": "Value"
+              },
+              "player_id": {
+                "dtype": "int64",
+                "_type": "Value"
+              },
+              "player_name": {
+                "dtype": "string",
+                "_type": "Value"
+              },
+              "player_role": {
+                "dtype": "string",
+                "_type": "Value"
+              },
+              "position": {
+                "x": {
+                  "dtype": "float64",
+                  "_type": "Value"
+                },
+                "y": {
+                  "dtype": "float64",
+                  "_type": "Value"
+                }
+              },
+              "team_name": {
+                "dtype": "string",
+                "_type": "Value"
+              },
+              "velocity": {
+                "x": {
+                  "dtype": "float64",
+                  "_type": "Value"
+                },
+                "y": {
+                  "dtype": "float64",
+                  "_type": "Value"
+                }
+              }
+            }
+          ]
+        },
+        "player": {
+          "action": {
+            "dtype": "string",
+            "_type": "Value"
+          },
+          "action_probs": {
+            "dtype": "null",
+            "_type": "Value"
+          },
+          "index": {
+            "dtype": "int64",
+            "_type": "Value"
+          },
+          "player_id": {
+            "dtype": "int64",
+            "_type": "Value"
+          },
+          "player_name": {
+            "dtype": "string",
+            "_type": "Value"
+          },
+          "player_role": {
+            "dtype": "string",
+            "_type": "Value"
+          },
+          "position": {
+            "x": {
+              "dtype": "float64",
+              "_type": "Value"
+            },
+            "y": {
+              "dtype": "float64",
+              "_type": "Value"
+            }
+          },
+          "team_name": {
+            "dtype": "string",
+            "_type": "Value"
+          },
+          "velocity": {
+            "x": {
+              "dtype": "float64",
+              "_type": "Value"
+            },
+            "y": {
+              "dtype": "float64",
+              "_type": "Value"
+            }
+          }
+        },
+        "reward": {
+          "dtype": "float64",
+          "_type": "Value"
+        }
+      }
+    ]
+  },
+  "homepage": "",
+  "license": "",
+  "size_in_bytes": 39856754,
+  "splits": {
+    "train": {
+      "name": "train",
+      "num_bytes": 9715655,
+      "num_examples": 16,
+      "dataset_name": "json"
+    }
+  },
+  "version": {
+    "version_str": "0.0.0",
+    "major": 0,
+    "minor": 0,
+    "patch": 0
+  }
+}

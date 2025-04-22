@@ -243,7 +243,7 @@ def movie_from_images(image_files, output_file):
 
 def create_movie(q_values_path, match_id, sequence_id):
     target_file_path = q_values_path
-    tracking_data_path = os.getcwd()+f'/tests/data/datastadium/{match_id}/events.jsonl' # tracking data path preprocessed in SAR Package
+    tracking_data_path = os.getcwd()+f'/test/data/dss/preprocess_data/{match_id}/events.jsonl' # tracking data path preprocessed in SAR Package
 
     df = pd.DataFrame()
     data_list = []
@@ -274,8 +274,8 @@ def create_movie(q_values_path, match_id, sequence_id):
 
         print(f"player name: {name}")
         plot_q_values(df_sequence, q_values, name, team_name, match_id, sequence_id)
-        image_files = sorted(glob.glob(os.getcwd()+f'/tests/data/figures/{match_id}/frame_{name}_{sequence_id}*.png'))
-        output_dir = os.getcwd()+f'/tests/data/movies/'
+        image_files = sorted(glob.glob(os.getcwd()+f'/test/data/figures/{match_id}/frame_{name}_{sequence_id}*.png'))
+        output_dir = os.getcwd()+f'/test/data/movies/'
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         output_file = os.path.join(output_dir, f'{match_id}_{sequence_id}_{name}.avi')
