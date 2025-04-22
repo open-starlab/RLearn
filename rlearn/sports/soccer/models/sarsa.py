@@ -166,7 +166,8 @@ class AttacckerSARSAModel(QModelBase):
         ax.set_xticks(range(self.vocab_size))
         ax.set_xlabel('Classes')
         ax.set_ylabel('Predicted Ratio')
-        self.logger.experiment.add_figure("Predicted Class Ratios (validation)", fig, self.current_epoch)
+        if self.logger is not None:
+            self.logger.experiment.add_figure("Predicted Class Ratios (validation)", fig, self.current_epoch)
 
         # log gold count as a histogram
         gold_actions = batch['action'][batch['mask']]
@@ -177,7 +178,8 @@ class AttacckerSARSAModel(QModelBase):
         ax.set_xticks(range(self.vocab_size))
         ax.set_xlabel('Classes')
         ax.set_ylabel('Gold Ratio')
-        self.logger.experiment.add_figure("Gold Class Ratios (validation)", fig, self.current_epoch)
+        if self.logger is not None:
+            self.logger.experiment.add_figure("Gold Class Ratios (validation)", fig, self.current_epoch)
 
         return total_loss
 
@@ -234,7 +236,8 @@ class AttacckerSARSAModel(QModelBase):
         ax.set_xticks(range(self.vocab_size))
         ax.set_xlabel('Classes')
         ax.set_ylabel('Predicted Ratio')
-        self.logger.experiment.add_figure("Predicted Class Ratios (test)", fig, self.current_epoch)
+        if self.logger is not None:
+            self.logger.experiment.add_figure("Predicted Class Ratios (test)", fig, self.current_epoch)
 
         # log gold count as a histogram
         gold_actions = batch['action'][batch['mask']]
@@ -245,7 +248,8 @@ class AttacckerSARSAModel(QModelBase):
         ax.set_xticks(range(self.vocab_size))
         ax.set_xlabel('Classes')
         ax.set_ylabel('Gold Ratio')
-        self.logger.experiment.add_figure("Gold Class Ratios (test)", fig, self.current_epoch)
+        if self.logger is not None:
+            self.logger.experiment.add_figure("Gold Class Ratios (test)", fig, self.current_epoch)
 
         return total_loss
 

@@ -169,7 +169,7 @@ class rlearn_model_soccer:
         logging.info(f"output_path: {self.output_path} (elapsed: {time.time() - start:.2f} sec)")
 
 
-    def train(self, exp_name, run_name, accelerator, devices, strategy):
+    def train(self, exp_name, run_name, accelerator, devices, strategy, mlflow=True):
         seed_everything(self.seed)
         exp_config = load_json(self.config)
         config_copy = deepcopy(exp_config)
@@ -223,12 +223,15 @@ class rlearn_model_soccer:
         else:
             class_weights = None
             
-
-        mlflow_logger = pl.loggers.MLFlowLogger(
-            experiment_name=exp_name,
-            run_name=run_name,
-            save_dir=str(PROJECT_DIR / "mlruns"),
-        )
+        if mlflow:
+            mlflow_logger = pl.loggers.MLFlowLogger(
+                experiment_name=exp_name,
+                run_name=run_name,
+                save_dir=str(PROJECT_DIR / "mlruns"),
+            )
+        else:
+            mlflow_logger = False
+    
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
             dirpath=output_dir / "checkpoints",
             monitor="val_loss",
