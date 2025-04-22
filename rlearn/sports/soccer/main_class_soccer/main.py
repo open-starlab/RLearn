@@ -224,10 +224,6 @@ class rlearn_model_soccer:
             class_weights = None
             
 
-        tensorboard_logger = pl.loggers.TensorBoardLogger(
-            save_dir=str(output_dir / "tensorboard_logs"),
-            name=run_name,
-        )
         mlflow_logger = pl.loggers.MLFlowLogger(
             experiment_name=exp_name,
             run_name=run_name,
@@ -247,7 +243,7 @@ class rlearn_model_soccer:
         )
         trainer = pl.Trainer(
             max_epochs=exp_config["max_epochs"],
-            logger=[tensorboard_logger, mlflow_logger],
+            logger=mlflow_logger,
             callbacks=[checkpoint_callback, early_stopping_callback],
             accelerator=accelerator,
             devices=devices,

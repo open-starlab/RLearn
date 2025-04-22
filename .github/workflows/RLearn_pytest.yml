@@ -1,10 +1,12 @@
-name: Multiple Tests
+name: RLearn Multiple Tests
 
 on:
   pull_request:
     paths:
       - 'rlearn/*'
-      - 'test/*'
+      - 'test/config/*'
+      - 'test/data/dss/*'
+      - 'test/data/stb_skc/*'
       - '.github/workflows/RLearn_pytest.yml'
 
 # Add these permissions
@@ -33,9 +35,11 @@ jobs:
         python -m pip install --upgrade pip
         pip install pytest
         pip install torch
-        pip install openstarlab-rlearn
+        git clone https://github.com/open-starlab/RLearn.git
+        cd ./RLearn
+        pip install .
         
-    - name: Run SAR class tests
+    - name: Run RLearn tests
       run: |
         pytest rlearn/sports/pytest_main_class.py -v
 
@@ -45,7 +49,7 @@ jobs:
       with:
         script: |
           const output = `
-          #### SAR Class Test Results 📝
+          ####  RLearn Test Results 📝
           - Status: ${process.env.TEST_OUTCOME}
           - OS: ${{ runner.os }}
           - Python: ${{ matrix.python-version }}
