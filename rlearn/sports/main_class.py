@@ -10,21 +10,21 @@ if __name__ == '__main__':
     import os
     # test split_data
     RLearn_Model(
-        input_path=os.getcwd()+'/tests/data/datastadium/',
-        output_path=os.getcwd()+'/tests/data/datastadium/split/'
+        input_path=os.getcwd()+'/test/data/datastadium/',
+        output_path=os.getcwd()+'/test/data/datastadium/split/'
     ).split_train_test()
 
     # test preprocess observation data
     RLearn_Model(
-        config=os.getcwd()+'/tests/config/preprocessing_dssports2020.json',
-        input_path=os.getcwd()+'/tests/data/datastadium/split/mini',
-        output_path=os.getcwd()+'/tests/data/datastadium_simple_obs_action_seq/split/mini',
+        config=os.getcwd()+'/test/config/preprocessing_dssports2020.json',
+        input_path=os.getcwd()+'/test/data/datastadium/split/mini',
+        output_path=os.getcwd()+'/test/data/datastadium_simple_obs_action_seq/split/mini',
         num_process=5,
     ).preprocess_observation(batch_size=64)
 
     # test train model
     RLearn_Model(
-        config=os.getcwd()+'/tests/config/exp_config.json'
+        config=os.getcwd()+'/test/config/exp_config.json'
     ).train(
         exp_name='sarsa_attacker',
         run_name='test',

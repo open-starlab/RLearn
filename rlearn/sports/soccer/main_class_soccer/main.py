@@ -1,6 +1,7 @@
 import logging
 import re
 from pathlib import Path, PosixPath
+import os
 from typing import Any, Dict
 from copy import deepcopy
 import time
@@ -37,31 +38,9 @@ class rlearn_model_soccer:
         self.output_path = output_path
 
         
-    def split_train_test(self):
+    def split_train_test(self, pytest=False):
         # Load data into a Dataset
-        game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if re.match(r"\d{7}", p.name)]
-        train_game_ids, test_val_game_ids = train_test_split(game_ids, test_size=0.5, random_state=self.seed)
-        test_game_ids, val_game_ids = train_test_split(test_val_game_ids, test_size=0.1, random_state=self.seed)
-
-        train_dataset = load_dataset(
-            "json",
-            data_files=[str(Path(self.input_path) / f"{game_id}" / "events.jsonl") for game_id in train_game_ids],
-            split="train",
-            num_proc=self.num_process,
-        )
-        valid_dataset = load_dataset(
-            "json",
-            data_files=[str(Path(self.input_path) / f"{game_id}" / "events.jsonl") for game_id in val_game_ids],
-            split="train",
-            num_proc=self.num_process,
-        )
-        test_dataset = load_dataset(
-            "json",
-            data_files=[str(Path(self.input_path) / f"{game_id}" / "events.jsonl") for game_id in test_game_ids],
-            split="train",
-            num_proc=self.num_process,
-        )
-
+        
         output_dir = Path(self.output_path)
         # Set output directory
         if output_dir is None:
@@ -69,19 +48,52 @@ class rlearn_model_soccer:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save the splits
-        for split_name, split_dataset in zip(
-            ["train", "validation", "test"],
-            [train_dataset, valid_dataset, test_dataset],
-        ):
-            split_dataset.save_to_disk(output_dir / split_name)
+        if pytest:
+            game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if re.match(r"\d{4}", p.name)]
+            train_dataset = load_dataset(
+                "json",
+                data_files=[str(Path(self.input_path) / f"{game_id}" / "events.jsonl") for game_id in game_ids],
+                split="train",
+                num_proc=self.num_process,
+            )
+        else:
+            game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if re.match(r"\d{7}", p.name)]
+            train_game_ids, test_val_game_ids = train_test_split(game_ids, test_size=0.5, random_state=self.seed)
+            test_game_ids, val_game_ids = train_test_split(test_val_game_ids, test_size=0.1, random_state=self.seed)
+
+            train_dataset = load_dataset(
+                "json",
+                data_files=[str(Path(self.input_path) / f"{game_id}" / "events.jsonl") for game_id in train_game_ids],
+                split="train",
+                num_proc=self.num_process,
+            )
+            valid_dataset = load_dataset(
+                "json",
+                data_files=[str(Path(self.input_path) / f"{game_id}" / "events.jsonl") for game_id in val_game_ids],
+                split="train",
+                num_proc=self.num_process,
+            )
+            test_dataset = load_dataset(
+                "json",
+                data_files=[str(Path(self.input_path) / f"{game_id}" / "events.jsonl") for game_id in test_game_ids],
+                split="train",
+                num_proc=self.num_process,
+            )
+
+            # Save the splits
+            for split_name, split_dataset in zip(
+                ["train", "validation", "test"],
+                [train_dataset, valid_dataset, test_dataset],
+            ):
+                split_dataset.save_to_disk(output_dir / split_name)
+
+            logging.info(f"Data splits saved in {output_dir}:")
+            logging.info(f"Train: {len(train_dataset)}")
+            logging.info(f"Validation: {len(valid_dataset)}")
+            logging.info(f"Test: {len(test_dataset)}")
+        
         # for debugging
         train_dataset.select(range(5)).save_to_disk(output_dir / "mini")
-
-        logging.info(f"Data splits saved in {output_dir}:")
-        logging.info(f"Train: {len(train_dataset)}")
-        logging.info(f"Validation: {len(valid_dataset)}")
-        logging.info(f"Test: {len(test_dataset)}")
 
     
     def events2attacker_simple_observation_action_sequence(
@@ -157,7 +169,7 @@ class rlearn_model_soccer:
         logging.info(f"output_path: {self.output_path} (elapsed: {time.time() - start:.2f} sec)")
 
 
-    def train(self, exp_name, run_name, accelerator, devices, strategy):
+    def train(self, exp_name, run_name, accelerator, devices, strategy, mlflow=True):
         seed_everything(self.seed)
         exp_config = load_json(self.config)
         config_copy = deepcopy(exp_config)
@@ -211,16 +223,15 @@ class rlearn_model_soccer:
         else:
             class_weights = None
             
-
-        tensorboard_logger = pl.loggers.TensorBoardLogger(
-            save_dir=str(output_dir / "tensorboard_logs"),
-            name=run_name,
-        )
-        mlflow_logger = pl.loggers.MLFlowLogger(
-            experiment_name=exp_name,
-            run_name=run_name,
-            save_dir=str(PROJECT_DIR / "mlruns"),
-        )
+        if mlflow:
+            mlflow_logger = pl.loggers.MLFlowLogger(
+                experiment_name=exp_name,
+                run_name=run_name,
+                save_dir=str(PROJECT_DIR / "mlruns"),
+            )
+        else:
+            mlflow_logger = False
+    
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
             dirpath=output_dir / "checkpoints",
             monitor="val_loss",
@@ -235,7 +246,7 @@ class rlearn_model_soccer:
         )
         trainer = pl.Trainer(
             max_epochs=exp_config["max_epochs"],
-            logger=[tensorboard_logger, mlflow_logger],
+            logger=mlflow_logger,
             callbacks=[checkpoint_callback, early_stopping_callback],
             accelerator=accelerator,
             devices=devices,
@@ -276,7 +287,7 @@ class rlearn_model_soccer:
 
 
     def visualize_data(self, model_name, checkpoint_path, match_id, sequence_id):
-        exp_config_path = os.getcwd()+f"/tests/config/{model_name}.json"
+        exp_config_path = os.getcwd()+f"/test/config/{model_name}.json"
         exp_config = load_json(exp_config_path)
         test_file_path = Path(os.getcwd()+ "/" + exp_config['dataset']['test_filename'])
         test_dataset = load_from_disk(test_file_path)
