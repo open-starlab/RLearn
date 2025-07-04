@@ -83,6 +83,40 @@
         "lambda_": 0.0001,
         "lambda2_": 0.005
     },
+    "qmix_model": {
+        "type": "qmix",
+        "n_agents": 11,
+        "observation_dim": 128,
+        "state_dim": 256,
+        "action_dim": 19,
+        "sequence_encoder": {
+            "type": "gru",
+            "input_size": 128,
+            "hidden_size": 128,
+            "num_layers": 1,
+            "bias": true,
+            "dropout": 0.0,
+            "bidirectional": false
+        },
+        "mixer_network": {
+            "hidden_dim": 256,
+            "hyper_hidden": 64,
+            "mixing_hidden": 32
+        },
+        "vocab_size": 20,
+        "optimizer": {
+            "type": "torch::Adam",
+            "lr": 0.0005,
+            "weight_decay": 1e-5
+        },
+        "gamma": 0.99,
+        "tau": 0.01,
+        "epsilon_start": 1.0,
+        "epsilon_end": 0.05,
+        "epsilon_decay": 0.995,
+        "buffer_size": 10000,
+        "target_update_interval": 200
+    },
     "class_weight_fn": {
         "type": "exponential",
         "cache_path": "test/data/datastadium_simple_obs_action_seq/exponential_beta0.9.pt",
