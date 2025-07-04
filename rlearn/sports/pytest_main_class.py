@@ -17,8 +17,8 @@ def test_PVS_split_mini_data():
     # test split_data
     RLearn_Model(
         state_def="PVS",
-        input_path="RLearn/test/data/dss/preprocess_data/",
-        output_path="RLearn/test/data/dss/preprocess_data/split/",
+        input_path="test/data/dss/preprocess_data/",
+        output_path="test/data/dss/preprocess_data/split/",
     ).split_train_test(pytest=True)
 
 
@@ -26,17 +26,17 @@ def test_PVS_preprocess_data():
     # test preprocess observation data
     RLearn_Model(
         state_def="PVS",
-        config="RLearn/test/config/preprocessing_dssports2020.json",
-        input_path="RLearn/test/data/dss/preprocess_data/split/mini",
-        output_path="RLearn/test/data/dss_simple_obs_action_seq/split/mini",
-        num_process=5,
+        config="test/config/preprocessing_dssports2020.json",
+        input_path="test/data/dss/preprocess_data/split/mini",
+        output_path="test/data/dss_simple_obs_action_seq/split/mini",
+        num_process=3,
     ).preprocess_observation(batch_size=64)
 
 
 def test_PVS_train_data():
     # test train model
-    RLearn_Model(state_def="PVS", config="RLearn/test/config/exp_config.json").train(
-        exp_name="sarsa_attacker", run_name="test", accelerator="cpu", devices=1, strategy="ddp", mlflow=False
+    RLearn_Model(state_def="PVS", config="test/config/exp_config.json").train(
+        exp_name="sarsa_attacker", run_name="test", accelerator="cpu", devices=1, strategy="auto", mlflow=False
     )
 
 
@@ -44,7 +44,7 @@ def test_PVS_visualize_data():
     # test visualize
     RLearn_Model(state_def="PVS").visualize_data(
         model_name="exp_config",
-        checkpoint_path="RLearn/rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=1-step=2.ckpt",
+        checkpoint_path="rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=1-step=2.ckpt",
         match_id="2022100106",
         sequence_id=0,
     )
