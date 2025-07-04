@@ -1,23 +1,26 @@
-import os
+from typing import Any, Dict, List, Tuple, Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
-from torch.utils.tensorboard import SummaryWriter
-from datetime import datetime
-import time
+from torch import Tensor
+
+from rlearn.sports.soccer.models.q_model_base import QModelBase
 
 class AgentNetwork(nn.Module):
-    """DRQN for individual soccer agents (shared parameters)"""
-    def __init__(self, obs_dim, action_dim, hidden_dim=128, rnn_dim=64):
+    """DRQN for individual agents (shared parameters)"""
+    def __init__(
+        self, 
+        obs_dim: int, 
+        action_dim: int, 
+        hidden_dim: int = 128, 
+        rnn_dim: int = 64
+    ):
         super().__init__()
         self.obs_dim = obs_dim
         self.action_dim = action_dim
         self.hidden_dim = hidden_dim
         self.rnn_dim = rnn_dim
-        
-        # Store init args for target network creation
-        self.init_args = (obs_dim, action_dim, hidden_dim, rnn_dim)
         
         self.fc = nn.Sequential(
             nn.Linear(obs_dim, hidden_dim),
@@ -26,13 +29,12 @@ class AgentNetwork(nn.Module):
         self.rnn = nn.GRU(hidden_dim, rnn_dim, batch_first=True)
         self.q_net = nn.Linear(rnn_dim, action_dim)
         
-    def init_hidden(self, batch_size):
+    def init_hidden(self, batch_size: int) -> Tensor:
         return torch.zeros(1, batch_size, self.rnn_dim)
     
-    def forward(self, obs, hidden_state):
-        # obs: (batch_size, seq_len, obs_dim) or (batch_size, obs_dim)
+    def forward(self, obs: Tensor, hidden_state: Tensor) -> Tuple[Tensor, Tensor]:
         if obs.dim() == 2:
-            obs = obs.unsqueeze(1)  # Add sequence dimension
+            obs = obs.unsqueeze(1)
         
         x = self.fc(obs)
         out, h = self.rnn(x, hidden_state)
@@ -40,28 +42,24 @@ class AgentNetwork(nn.Module):
         return q_values, h
 
 class MixingNetwork(nn.Module):
-    """QMIX mixer with hypernetworks for RoboCup2D"""
-    def __init__(self, n_agents, state_dim, hyper_hidden=64, mixing_hidden=32):
+    """QMIX mixer with hypernetworks"""
+    def __init__(
+        self, 
+        n_agents: int, 
+        state_dim: int, 
+        hyper_hidden: int = 64, 
+        mixing_hidden: int = 32
+    ):
         super().__init__()
         self.n_agents = n_agents
         self.state_dim = state_dim
-        self.hyper_hidden = hyper_hidden
-        self.mixing_hidden = mixing_hidden
         
-        # Store init args for target network creation
-        self.init_args = (n_agents, state_dim, hyper_hidden, mixing_hidden)
-        
-        # Hypernetwork for weights
         self.hyper_w1 = nn.Sequential(
             nn.Linear(state_dim, hyper_hidden),
             nn.ReLU(),
             nn.Linear(hyper_hidden, n_agents * mixing_hidden)
         )
-        
-        # Hypernetwork for biases
         self.hyper_b1 = nn.Linear(state_dim, mixing_hidden)
-        
-        # Final layer hypernetworks
         self.hyper_w2 = nn.Sequential(
             nn.Linear(state_dim, hyper_hidden),
             nn.ReLU(),
@@ -73,334 +71,232 @@ class MixingNetwork(nn.Module):
             nn.Linear(hyper_hidden, 1)
         )
 
-    def forward(self, agent_qs, states):
+    def forward(self, agent_qs: Tensor, states: Tensor) -> Tensor:
         bs = states.size(0)
-        
-        # Generate weights and biases
         w1 = torch.abs(self.hyper_w1(states))
-        b1 = self.hyper_b1(states)  # Fixed syntax error
+        b1 = self.hyper_b1(states)
         w1 = w1.view(bs, self.n_agents, -1)
         b1 = b1.view(bs, 1, -1)
         
-        # First layer mixing
         hidden = torch.bmm(agent_qs.unsqueeze(1), w1) + b1
         hidden = F.relu(hidden)
         
-        # Second layer
         w2 = torch.abs(self.hyper_w2(states)).view(bs, -1, 1)
-        b2 = self.hyper_b2(states).view(bs, 1, 1)  # Fixed syntax error
+        b2 = self.hyper_b2(states).view(bs, 1, 1)
         
-        # Final output
         q_total = torch.bmm(hidden, w2) + b2
         return q_total.squeeze(-1)
 
-class QMIX:
-    """Complete QMIX implementation with training logic"""
-    
-    def __init__(self, config, log_dir=None, device="auto"):
-        self.device = self._get_device(device)
-        self.config = config
+@QModelBase.register("qmix")
+class QMIXModel(QModelBase):
+    def __init__(
+        self,
+        obs_dim: int,
+        state_dim: int,
+        action_dim: int,
+        n_agents: int,
+        agent_hidden_dim: int = 128,
+        agent_rnn_dim: int = 64,
+        hyper_hidden_dim: int = 64,
+        mixing_hidden_dim: int = 32,
+        gamma: float = 0.99,
+        tau: float = 0.005,
+        lr: float = 0.001,
+        grad_norm_clip: float = 10.0,
+        use_sarsa: bool = False,
+        **kwargs
+    ):
+        super().__init__()
+        self.save_hyperparameters()
         
-        # Initialize agent network
+        # Initialize networks
         self.agent_net = AgentNetwork(
-            obs_dim=config["obs_dim"],
-            action_dim=config["action_dim"],
-            hidden_dim=config.get("hidden_dim", 128),
-            rnn_dim=config.get("rnn_dim", 64)
-        ).to(self.device)
-        
-        # Initialize mixer network
-        self.mixer_net = MixingNetwork(
-            n_agents=config["n_agents"],
-            state_dim=config["state_dim"],
-            hyper_hidden=config.get("hyper_hidden", 64),
-            mixing_hidden=config.get("mixing_hidden", 32)
-        ).to(self.device)
-        
-        # Initialize trainer
-        self.trainer = QMIXTrainer(
-            agent_net=self.agent_net,
-            mixer_net=self.mixer_net,
-            config=config,
-            log_dir=log_dir,
-            device=self.device
+            obs_dim=obs_dim,
+            action_dim=action_dim,
+            hidden_dim=agent_hidden_dim,
+            rnn_dim=agent_rnn_dim
         )
-    
-    def _get_device(self, device_str):
-        """Determine the best available device"""
-        if device_str == "auto":
-            return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        return torch.device(device_str)
-    
-    def train(self, batch):
-        """Perform one training step"""
-        return self.trainer.update(batch)
-    
-    def get_actions(self, obs, hidden_states=None, epsilon=0.0):
-        """Get actions from agent network for environment interaction"""
-        self.agent_net.eval()
-        with torch.no_grad():
-            if hidden_states is None:
-                batch_size = obs.size(0) if obs.dim() > 1 else 1
-                hidden_states = self.agent_net.init_hidden(batch_size).to(self.device)
-            
-            obs = obs.to(self.device)
-            q_values, new_hidden = self.agent_net(obs, hidden_states)
-            
-            # Epsilon-greedy action selection
-            if torch.rand(1).item() < epsilon:
-                actions = torch.randint(0, self.config["action_dim"], (q_values.size(0),))
-            else:
-                actions = q_values.argmax(dim=-1)
-            
-        self.agent_net.train()
-        return actions, new_hidden
-    
-    def save(self, path):
-        """Save model weights"""
-        torch.save({
-            "agent_net": self.agent_net.state_dict(),
-            "mixer_net": self.mixer_net.state_dict(),
-            "config": self.config
-        }, path)
-    
-    def load(self, path):
-        """Load model weights"""
-        checkpoint = torch.load(path, map_location=self.device)
-        self.agent_net.load_state_dict(checkpoint["agent_net"])
-        self.mixer_net.load_state_dict(checkpoint["mixer_net"])
-    
-    def close(self):
-        """Clean up resources"""
-        self.trainer.close()
-
-class QMIXTrainer:
-    """QMIX training logic with TensorBoard logging"""
-    
-    def __init__(self, agent_net, mixer_net, config, log_dir=None, device="cuda"):
-        self.device = torch.device(device if torch.cuda.is_available() else "cpu")
-        print(f"Using device: {self.device}")
-
-        # Networks
-        self.agent_net = agent_net
-        self.mixer_net = mixer_net
         
-        # Target networks
-        self.target_agent_net = AgentNetwork(*agent_net.init_args).to(self.device)
-        self.target_mixer_net = MixingNetwork(*mixer_net.init_args).to(self.device)
+        self.mixer_net = MixingNetwork(
+            n_agents=n_agents,
+            state_dim=state_dim,
+            hyper_hidden=hyper_hidden_dim,
+            mixing_hidden=mixing_hidden_dim
+        )
+        
+        # Initialize target networks
+        self.target_agent_net = AgentNetwork(
+            obs_dim=obs_dim,
+            action_dim=action_dim,
+            hidden_dim=agent_hidden_dim,
+            rnn_dim=agent_rnn_dim
+        )
+        
+        self.target_mixer_net = MixingNetwork(
+            n_agents=n_agents,
+            state_dim=state_dim,
+            hyper_hidden=hyper_hidden_dim,
+            mixing_hidden=mixing_hidden_dim
+        )
+        
         self._hard_update()
-        
-        # Optimizer
-        params = list(self.agent_net.parameters()) + list(self.mixer_net.parameters())
-        self.optimizer = optim.Adam(params, lr=config["lr"])
+        self.automatic_optimization = False
 
-        # Training parameters
-        self.gamma = config["gamma"]
-        self.tau = config.get("tau", 0.005)
-        self.n_agents = config["n_agents"]
-        self.grad_norm_clip = config.get("grad_norm_clip", 10.0)
-        
-        # Logging setup
-        self._init_logging(log_dir)
-        
-        # Training stats
-        self.global_step = 0
-        self.start_time = time.time()
-        self.loss_history = []
-        self.q_history = []
-
-    def _hard_update(self):
-        """Initialize target networks with same weights"""
+    def _hard_update(self) -> None:
+        """Synchronize target networks with main networks"""
         self.target_agent_net.load_state_dict(self.agent_net.state_dict())
         self.target_mixer_net.load_state_dict(self.mixer_net.state_dict())
 
-    def _init_logging(self, log_dir):
-        """Initialize TensorBoard logging"""
-        if log_dir is None:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            log_dir = os.path.join("runs", f"qmix_{timestamp}")
-        
-        os.makedirs(log_dir, exist_ok=True)
-        self.writer = SummaryWriter(log_dir=log_dir)
-        print(f"Logging to: {log_dir}")
+    def _soft_update(self) -> None:
+        """Soft update target networks"""
+        tau = self.hparams.tau
+        for target_param, param in zip(self.target_agent_net.parameters(), 
+                                      self.agent_net.parameters()):
+            target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
+            
+        for target_param, param in zip(self.target_mixer_net.parameters(), 
+                                      self.mixer_net.parameters()):
+            target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
 
-    def update(self, batch):
-        """Perform one training update"""
-        # Prepare batch
-        states = batch["states"].float().to(self.device)
-        obs = batch["obs"].float().to(self.device)
-        actions = batch["actions"].long().to(self.device)
-        rewards = batch["rewards"].float().to(self.device)
-        next_states = batch["next_states"].float().to(self.device)
-        next_obs = batch["next_obs"].float().to(self.device)
-        dones = batch["dones"].float().to(self.device)
-
-        # Compute Q values
-        q_total = self._compute_q_values(obs, states, actions)
-        
-        # Compute targets
-        with torch.no_grad():
-            target_q = self._compute_targets(next_obs, next_states, rewards, dones)
-        
-        # Optimize
-        loss = F.mse_loss(q_total, target_q)
-        self.optimizer.zero_grad()
-        loss.backward()
-        
-        # Clip gradients
-        torch.nn.utils.clip_grad_norm_(self.agent_net.parameters(), self.grad_norm_clip)
-        torch.nn.utils.clip_grad_norm_(self.mixer_net.parameters(), self.grad_norm_clip)
-        
-        self.optimizer.step()
-        
-        # Soft update targets
-        self._soft_update()
-        
-        # Logging
-        self._log_stats(loss, q_total, target_q)
-        
-        return loss.item()
-
-    def _compute_q_values(self, obs, states, actions):
+    def _compute_q_values(
+        self, 
+        net: AgentNetwork, 
+        obs: Tensor, 
+        actions: Tensor
+    ) -> Tensor:
         """Compute Q values through agent and mixer networks"""
-        B, T, N, O = obs.shape  # batch, time, agents, obs_dim
+        B, T, N, O = obs.shape
+        obs_flat = obs.view(B * N, T, O)
+        hidden = net.init_hidden(B * N).to(obs.device)
         
-        # Reshape for agent network processing
-        obs_reshaped = obs.view(B * N, T, O)  # (batch*agents, time, obs_dim)
+        q_values, _ = net(obs_flat, hidden)
+        q_values = q_values.view(B, N, T, -1).transpose(1, 2)
         
-        # Initialize hidden states
-        hidden = self.agent_net.init_hidden(B * N).to(self.device)
+        actions_expanded = actions.unsqueeze(-1)
+        q_taken = q_values.gather(-1, actions_expanded).squeeze(-1)
         
-        # Process through agent network
-        q_values, _ = self.agent_net(obs_reshaped, hidden)  # (B*N, T, action_dim)
-        
-        # Reshape back and select actions
-        q_values = q_values.view(B, N, T, -1).transpose(1, 2)  # (B, T, N, action_dim)
-        actions_expanded = actions.unsqueeze(-1)  # (B, T, N, 1)
-        q_taken = q_values.gather(-1, actions_expanded).squeeze(-1)  # (B, T, N)
-        
-        # Mix Q values for each timestep
         q_total_list = []
         for t in range(T):
-            agent_qs_t = q_taken[:, t, :]  # (B, N)
-            states_t = states[:, t, :]  # (B, state_dim)
+            agent_qs_t = q_taken[:, t, :]
+            states_t = self.current_batch["states"][:, t, :]
             q_total_t = self.mixer_net(agent_qs_t, states_t)
             q_total_list.append(q_total_t)
-        
-        return torch.stack(q_total_list, dim=1)  # (B, T)
+            
+        return torch.stack(q_total_list, dim=1)
 
-    def _compute_targets(self, next_obs, next_states, rewards, dones):
-        """Compute target Q values using target networks"""
-        B, T, N, O = next_obs.shape
+    def _compute_targets(self) -> Tensor:
+        """Compute targets based on SARSA/Q-learning"""
+        next_obs = self.current_batch["next_obs"]
+        rewards = self.current_batch["rewards"]
+        dones = self.current_batch["dones"]
+        gamma = self.hparams.gamma
         
-        # Reshape for agent network processing
-        next_obs_reshaped = next_obs.view(B * N, T, O)
+        if self.hparams.use_sarsa:  # SARSA
+            next_actions = self.current_batch["next_actions"]
+            next_q = self._compute_q_values(
+                self.target_agent_net,
+                next_obs,
+                next_actions
+            )
+        else:  # Q-learning
+            B, T, N, O = next_obs.shape
+            next_obs_flat = next_obs.view(B * N, T, O)
+            hidden = self.target_agent_net.init_hidden(B * N).to(next_obs.device)
+            
+            q_next, _ = self.target_agent_net(next_obs_flat, hidden)
+            q_next = q_next.view(B, N, T, -1).transpose(1, 2)
+            max_q_next = q_next.max(dim=-1)[0]
+            
+            next_q_list = []
+            for t in range(T):
+                max_q_next_t = max_q_next[:, t, :]
+                next_states_t = self.current_batch["next_states"][:, t, :]
+                next_q_t = self.target_mixer_net(max_q_next_t, next_states_t)
+                next_q_list.append(next_q_t)
+                
+            next_q = torch.stack(next_q_list, dim=1)
         
-        # Initialize hidden states for target network
-        hidden = self.target_agent_net.init_hidden(B * N).to(self.device)
-        
-        # Process through target agent network
-        q_next, _ = self.target_agent_net(next_obs_reshaped, hidden)
-        q_next = q_next.view(B, N, T, -1).transpose(1, 2)  # (B, T, N, action_dim)
-        
-        # Get max Q values
-        max_q_next = q_next.max(dim=-1)[0]  # (B, T, N)
-        
-        # Mix target Q values for each timestep
-        target_q_list = []
-        for t in range(T):
-            max_q_next_t = max_q_next[:, t, :]  # (B, N)
-            next_states_t = next_states[:, t, :]  # (B, state_dim)
-            target_q_t = self.target_mixer_net(max_q_next_t, next_states_t)
-            target_q_list.append(target_q_t)
-        
-        target_q_total = torch.stack(target_q_list, dim=1)  # (B, T)
-        
-        # Compute TD targets
-        targets = rewards + self.gamma * (1 - dones) * target_q_total
-        return targets
+        return rewards + gamma * (1 - dones) * next_q.detach()
 
-    def _soft_update(self):
-        """Soft update target networks"""
-        for target_param, param in zip(self.target_agent_net.parameters(), self.agent_net.parameters()):
-            target_param.data.copy_(self.tau * param.data + (1.0 - self.tau) * target_param.data)
+    def training_step(self, batch: Dict[str, Tensor], batch_idx: int) -> Tensor:
+        self.current_batch = batch
+        opt = self.optimizers()
+        opt.zero_grad()
         
-        for target_param, param in zip(self.target_mixer_net.parameters(), self.mixer_net.parameters()):
-            target_param.data.copy_(self.tau * param.data + (1.0 - self.tau) * target_param.data)
-
-    def _log_stats(self, loss, q_values, targets):
-        """Log training statistics"""
-        self.writer.add_scalar("Loss/td_error", loss.item(), self.global_step)
-        self.writer.add_scalar("Q/average_q", q_values.mean().item(), self.global_step)
-        self.writer.add_scalar("Q/target_q", targets.mean().item(), self.global_step)
+        # Compute current Q values
+        q_total = self._compute_q_values(
+            self.agent_net,
+            batch["obs"],
+            batch["actions"]
+        )
         
-        # Store history
-        self.loss_history.append(loss.item())
-        self.q_history.append(q_values.mean().item())
+        # Compute targets
+        targets = self._compute_targets()
         
-        # Print periodically
-        if self.global_step % 100 == 0:
-            elapsed = time.time() - self.start_time
-            print(f"Step {self.global_step}: Loss={loss.item():.4f}, "
-                  f"Q={q_values.mean().item():.4f}, "
-                  f"Target={targets.mean().item():.4f}, "
-                  f"Time={elapsed:.2f}s")
+        # Compute loss
+        loss = F.mse_loss(q_total, targets)
+        self.log("train_loss", loss)
         
-        self.global_step += 1
+        # Backpropagation
+        self.manual_backward(loss)
+        torch.nn.utils.clip_grad_norm_(
+            self.agent_net.parameters(), 
+            self.hparams.grad_norm_clip
+        )
+        torch.nn.utils.clip_grad_norm_(
+            self.mixer_net.parameters(), 
+            self.hparams.grad_norm_clip
+        )
+        opt.step()
+        
+        # Soft update target networks
+        self._soft_update()
+        return loss
 
-    def close(self):
-        """Clean up resources"""
-        self.writer.close()
-        print(f"\nTraining completed in {time.time() - self.start_time:.2f} seconds")
-        if self.loss_history:
-            print(f"Final average loss: {sum(self.loss_history)/len(self.loss_history):.4f}")
+    def validation_step(self, batch: Dict[str, Tensor], batch_idx: int) -> Tensor:
+        self.current_batch = batch
+        
+        # Compute current Q values
+        q_total = self._compute_q_values(
+            self.agent_net,
+            batch["obs"],
+            batch["actions"]
+        )
+        
+        # Compute targets
+        targets = self._compute_targets()
+        
+        # Compute loss
+        loss = F.mse_loss(q_total, targets)
+        self.log("val_loss", loss)
+        return loss
 
-# Example usage and configuration
-def create_qmix_config():
-    """Create a configuration for QMIX training"""
-    return {
-        "obs_dim": 20,          # Agent observation dimension
-        "action_dim": 9,        # Number of possible actions  
-        "state_dim": 50,        # Global state dimension
-        "n_agents": 11,         # Number of agents (soccer team)
-        "hidden_dim": 128,      # Agent network hidden dimension
-        "rnn_dim": 64,          # RNN hidden dimension
-        "hyper_hidden": 64,     # Mixer hypernetwork hidden dimension
-        "mixing_hidden": 32,    # Mixer network hidden dimension
-        "lr": 0.0005,           # Learning rate
-        "gamma": 0.99,          # Discount factor
-        "tau": 0.005,           # Target network update rate
-        "grad_norm_clip": 10.0  # Gradient clipping
-    }
+    def test_step(self, batch: Dict[str, Tensor], batch_idx: int) -> Tensor:
+        return self.validation_step(batch, batch_idx)
 
-# Example training loop
-def example_training():
-    """Example of how to use the integrated QMIX system"""
-    config = create_qmix_config()
-    qmix = QMIX(config, log_dir="./logs/qmix_soccer")
-    
-    # Example batch structure (you would get this from your replay buffer)
-    batch_size, seq_len = 32, 10
-    example_batch = {
-        "states": torch.randn(batch_size, seq_len, config["state_dim"]),
-        "obs": torch.randn(batch_size, seq_len, config["n_agents"], config["obs_dim"]),
-        "actions": torch.randint(0, config["action_dim"], (batch_size, seq_len, config["n_agents"])),
-        "rewards": torch.randn(batch_size, seq_len),
-        "next_states": torch.randn(batch_size, seq_len, config["state_dim"]),
-        "next_obs": torch.randn(batch_size, seq_len, config["n_agents"], config["obs_dim"]),
-        "dones": torch.zeros(batch_size, seq_len)
-    }
-    
-    # Training step
-    loss = qmix.train(example_batch)
-    print(f"Training loss: {loss}")
-    
-    # Example of getting actions for environment interaction
-    current_obs = torch.randn(config["n_agents"], config["obs_dim"])
-    actions, hidden_states = qmix.get_actions(current_obs, epsilon=0.1)
-    print(f"Selected actions: {actions}")
-    
-    qmix.close()
+    def configure_optimizers(self) -> torch.optim.Optimizer:
+        params = list(self.agent_net.parameters()) + list(self.mixer_net.parameters())
+        return torch.optim.Adam(params, lr=self.hparams.lr)
 
-if __name__ == "__main__":
-    main_training()
+    def get_actions(
+        self, 
+        obs: Tensor, 
+        hidden: Optional[Tensor] = None,
+        epsilon: float = 0.0
+    ) -> Tuple[Tensor, Tensor]:
+        """Get actions for environment interaction"""
+        self.agent_net.eval()
+        if hidden is None:
+            batch_size = obs.size(0)
+            hidden = self.agent_net.init_hidden(batch_size).to(obs.device)
+            
+        with torch.no_grad():
+            q_values, new_hidden = self.agent_net(obs, hidden)
+            
+            if torch.rand(1).item() < epsilon:
+                actions = torch.randint(0, self.hparams.action_dim, (q_values.size(0),)
+            else:
+                actions = q_values.argmax(dim=-1)
+                
+        self.agent_net.train()
+        return actions, new_hidden
