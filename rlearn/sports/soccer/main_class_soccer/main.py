@@ -29,7 +29,8 @@ from ..env import OUTPUT_DIR, PROJECT_DIR
 from ..models.q_model_base import QModelBase
 from ..modules.datamodule import DataModule
 from ..class_weight.class_weight import ClassWeightBase
-from ..application.q_values_movie import create_movie, save_q_values_to_csv
+from ..application.q_values_movie import create_movie
+from ..application.q_values_csv import save_q_values_to_csv
 
 
 logger = logging.getLogger(__name__)
@@ -410,7 +411,7 @@ class rlearn_model_soccer:
 
         # Save Q-values to CSV if requested
         if save_q_values_csv:
-            model_name = exp_config.split("/")[-1].split(".")[0]
+            model_name = self.config.split("/")[-1].split(".")[0]
             save_dir = OUTPUT_DIR / "figures" / model_name
             save_q_values_to_csv(
                 model=model,
@@ -427,7 +428,7 @@ class rlearn_model_soccer:
         test_file_path = Path(os.getcwd() + "/" + exp_config["dataset"]["test_filename"])
         test_dataset = load_from_disk(test_file_path)
         test_dataset = DataModule.by_name(exp_config["datamodule"]["type"]).preprocess_data(
-            test_dataset, **exp_config["dataset"]["preprocess_config"]
+            test_dataset, self.state_def, **exp_config["dataset"]["preprocess_config"]
         )
 
         # unique game_ids

@@ -11,9 +11,11 @@ from rlearn.sports.soccer.modules.seq2seq_encoder import Seq2SeqEncoder
 from rlearn.sports.soccer.modules.token_embedder import TokenEmbedder
 from rlearn.sports.soccer.torch.metrics.classification import get_classification_full_metrics
 
+
 class Prediction:
     def __init__(self, q_values: torch.Tensor) -> None:
         self.q_values = q_values
+
 
 @QModelBase.register("sarsa_attacker")
 class AttacckerSARSAModel(QModelBase):
@@ -45,11 +47,6 @@ class AttacckerSARSAModel(QModelBase):
         self.encoder = Seq2SeqEncoder.from_params(sequence_encoder)
         self.fc1 = nn.Linear(self.observation_dim, self.encoder.get_input_dim())
         self.fc2 = nn.Linear(self.encoder.get_output_dim(), self.vocab_size)
-        print(f"vocab_size: {self.vocab_size}")
-        print(f"pad_token_id: {self.pad_token_id}")
-        print(f"self.input_dim: {self.encoder.get_input_dim()}")
-        print(f"self.output_dim: {self.encoder.get_output_dim()}")
-        print(f"self.observation_dim: {self.observation_dim}")
 
         # evaluation
         self.train_metrics = get_classification_full_metrics(
@@ -73,7 +70,7 @@ class AttacckerSARSAModel(QModelBase):
 
     def forward(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         # observation: (batch_size, seq_len, obs_dim)
-        x = F.relu(self.fc1(batch['observation']))  # (batch_size, input_length, encoder_input_dim)
+        x = F.relu(self.fc1(batch["observation"]))  # (batch_size, input_length, encoder_input_dim)
         out = self.encoder(x)
         q_values = self.fc2(out)  # (batch_size, input_length, vocab_size)
 
@@ -93,9 +90,9 @@ class AttacckerSARSAModel(QModelBase):
 
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         # avail_actions = []
-        mask = batch['mask']  # (batch_size, input_length)
-        reward = batch['reward']  # (batch_size, input_length)
-        action = batch['action']  # (batch_size, input_length)
+        mask = batch["mask"]  # (batch_size, input_length)
+        reward = batch["reward"]  # (batch_size, input_length)
+        action = batch["action"]  # (batch_size, input_length)
 
         q_values = self.forward(batch)  # (batch_size, input_length, vocab_size)
         pred_q_values = q_values.argmax(dim=2)  # (batch_size, input_length)
@@ -112,7 +109,7 @@ class AttacckerSARSAModel(QModelBase):
             ignore_index=self.pad_token_id,
             weight=self.class_weights.to(q_values.device) if self.class_weights is not None else None,
         )
-        
+
         self.train_metrics(
             q_values.reshape(-1, self.vocab_size),
             action.reshape(-1),
@@ -124,15 +121,14 @@ class AttacckerSARSAModel(QModelBase):
         self.log("train_total_loss", total_loss)
 
         return total_loss
-    
+
     def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        mask = batch['mask']  # (batch_size, input_length)
-        reward = batch['reward']  # (batch_size, input_length)
-        action = batch['action']  # (batch_size, input_length)
+        mask = batch["mask"]  # (batch_size, input_length)
+        reward = batch["reward"]  # (batch_size, input_length)
+        action = batch["action"]  # (batch_size, input_length)
 
         q_values = self.forward(batch)  # (batch_size, input_length, vocab_size)
         pred_q_values = q_values.argmax(dim=2)  # (batch_size, input_length)
-        print(f"pred q values: {pred_q_values}")
         td_loss = (reward[:, 1:] + self.gamma * pred_q_values[:, 1:] - pred_q_values[:, :-1]) ** 2
         td_loss = (td_loss * mask[:, 1:]).sum() / mask[:, 1:].sum()
         # L1 loss for parameter regularization
@@ -158,41 +154,40 @@ class AttacckerSARSAModel(QModelBase):
         self.log("val_loss", total_loss)
 
         # log prediction count as a histogram
-        pred_actions = q_values.argmax(dim=2)[batch['mask']]
+        pred_actions = q_values.argmax(dim=2)[batch["mask"]]
         class_counts = torch.bincount(pred_actions, minlength=self.vocab_size).cpu().numpy()
         class_ratios = class_counts / class_counts.sum()
         fig, ax = plt.subplots()
         ax.bar(range(self.vocab_size), class_ratios)
         ax.set_xticks(range(self.vocab_size))
-        ax.set_xlabel('Classes')
-        ax.set_ylabel('Predicted Ratio')
+        ax.set_xlabel("Classes")
+        ax.set_ylabel("Predicted Ratio")
         if self.logger is not None:
             self.logger.experiment.add_figure("Predicted Class Ratios (validation)", fig, self.current_epoch)
 
         # log gold count as a histogram
-        gold_actions = batch['action'][batch['mask']]
+        gold_actions = batch["action"][batch["mask"]]
         class_counts = torch.bincount(gold_actions.flatten(), minlength=self.vocab_size).cpu().numpy()
         class_ratios = class_counts / class_counts.sum()
         fig, ax = plt.subplots()
         ax.bar(range(self.vocab_size), class_ratios)
         ax.set_xticks(range(self.vocab_size))
-        ax.set_xlabel('Classes')
-        ax.set_ylabel('Gold Ratio')
+        ax.set_xlabel("Classes")
+        ax.set_ylabel("Gold Ratio")
         if self.logger is not None:
             self.logger.experiment.add_figure("Gold Class Ratios (validation)", fig, self.current_epoch)
 
         return total_loss
 
     def test_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        mask = batch['mask']  # (batch_size, input_length)
-        reward = batch['reward']  # (batch_size, input_length)
-        action = batch['action']  # (batch_size, input_length)
+        mask = batch["mask"]  # (batch_size, input_length)
+        reward = batch["reward"]  # (batch_size, input_length)
+        action = batch["action"]  # (batch_size, input_length)
 
         q_values = self.forward(batch)  # (batch_size, input_length, vocab_size)
         self.check_for_nan_inf(q_values, "q_values")
 
         pred_q_values = q_values.argmax(dim=2)  # (batch_size, input_length)
-        print(f"pred q values: {pred_q_values}")
         self.check_for_nan_inf(pred_q_values, "pred_q_values")
 
         td_loss = (reward[:, 1:] + self.gamma * pred_q_values[:, 1:] - pred_q_values[:, :-1]) ** 2
@@ -228,31 +223,30 @@ class AttacckerSARSAModel(QModelBase):
         self.log("test_loss", total_loss)
 
         # log prediction count as a histogram
-        pred_actions = q_values.argmax(dim=2)[batch['mask']]
+        pred_actions = q_values.argmax(dim=2)[batch["mask"]]
         class_counts = torch.bincount(pred_actions, minlength=self.vocab_size).cpu().numpy()
         class_ratios = class_counts / class_counts.sum()
         fig, ax = plt.subplots()
         ax.bar(range(self.vocab_size), class_ratios)
         ax.set_xticks(range(self.vocab_size))
-        ax.set_xlabel('Classes')
-        ax.set_ylabel('Predicted Ratio')
+        ax.set_xlabel("Classes")
+        ax.set_ylabel("Predicted Ratio")
         if self.logger is not None:
             self.logger.experiment.add_figure("Predicted Class Ratios (test)", fig, self.current_epoch)
 
         # log gold count as a histogram
-        gold_actions = batch['action'][batch['mask']]
+        gold_actions = batch["action"][batch["mask"]]
         class_counts = torch.bincount(gold_actions, minlength=self.vocab_size).cpu().numpy()
         class_ratios = class_counts / class_counts.sum()
         fig, ax = plt.subplots()
         ax.bar(range(self.vocab_size), class_ratios)
         ax.set_xticks(range(self.vocab_size))
-        ax.set_xlabel('Classes')
-        ax.set_ylabel('Gold Ratio')
+        ax.set_xlabel("Classes")
+        ax.set_ylabel("Gold Ratio")
         if self.logger is not None:
             self.logger.experiment.add_figure("Gold Class Ratios (test)", fig, self.current_epoch)
 
         return total_loss
-
 
     def check_for_nan_inf(self, tensor, name):
         if torch.isnan(tensor).any():

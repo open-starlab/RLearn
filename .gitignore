@@ -1,5 +1,6 @@
 __pycache__/
 tests/
+test/data/**/*.arrow
 venv/
 openstarlab_rlearn.egg-info/
 dist/

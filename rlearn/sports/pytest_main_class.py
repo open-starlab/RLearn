@@ -45,7 +45,7 @@ def test_PVS_visualize_data():
     RLearn_Model(state_def="PVS").visualize_data(
         model_name="exp_config",
         checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=1-step=2.ckpt",
-        match_id="0001",
+        match_id="2022100106",
         sequence_id=0,
     )
 
@@ -82,7 +82,7 @@ def test_EDMS_visualize_data():
     RLearn_Model(state_def="EDMS").visualize_data(
         model_name="exp_config",
         checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=1-step=2.ckpt",
-        match_id="0001",
+        match_id="2022100106",
         sequence_id=0,
     )
 
@@ -92,8 +92,8 @@ if __name__ == "__main__":
     test_PVS_preprocess_data()
     test_PVS_train_data()
     test_PVS_visualize_data()
-    test_EDMS_split_mini_data()
-    test_EDMS_preprocess_data()
-    test_EDMS_train_data()
-    test_EDMS_visualize_data()
+    # test_EDMS_split_mini_data()
+    # test_EDMS_preprocess_data()
+    # test_EDMS_train_data()
+    # test_EDMS_visualize_data()
     print("Done")
