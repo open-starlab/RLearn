@@ -1,0 +1,94 @@
+{
+    "dataset": {
+        "train_filename": "test/data/dss_simple_obs_action_seq/split/mini",
+        "valid_filename": "test/data/dss_simple_obs_action_seq/split/mini",
+        "test_filename": "test/data/dss_simple_obs_action_seq/split/mini",
+        "preprocess_config": {
+            "state_action_tokenizer": {
+                "type": "action_only",
+                "action2id": {
+                    "idle": 0,
+                    "right": 1,
+                    "up_right": 2,
+                    "up": 3,
+                    "up_left": 4,
+                    "left": 5,
+                    "down_left": 6,
+                    "down": 7,
+                    "down_right": 8,
+                    "shot": 9,
+                    "dribble": 10,
+                    "through_pass": 11,
+                    "pass": 12,
+                    "cross": 13,
+                    "defensive_action": 14
+                },
+                "origin_pos": "center",
+                "special_tokens": [
+                    "[PAD]"
+                ]
+            },
+            "num_workers": 8,
+            "preprocess_batch_size": 32
+        }
+    },
+    "datamodule": {
+        "type": "jleague_rl_attacker",
+        "state_action_tokenizer": {
+            "type": "action_only",
+            "action2id": {
+                "idle": 0,
+                "right": 1,
+                "up_right": 2,
+                "up": 3,
+                "up_left": 4,
+                "left": 5,
+                "down_left": 6,
+                "down": 7,
+                "down_right": 8,
+                "shot": 9,
+                "dribble": 10,
+                "through_pass": 11,
+                "pass": 12,
+                "cross": 13,
+                "defensive_action": 14
+            },
+            "origin_pos": "center",
+            "special_tokens": [
+                "[PAD]"
+            ]
+        },
+        "num_workers": 1,
+        "batch_size": 256
+    },
+    "model": {
+        "type": "sarsa_attacker",
+        "observation_dim": 92,
+        "sequence_encoder": {
+            "type": "gru",
+            "input_size": 64,
+            "hidden_size": 64,
+            "num_layers": 1,
+            "bias": true,
+            "dropout": 0.0,
+            "bidirectional": false
+        },
+        "vocab_size": 16,
+        "optimizer": {
+            "type": "torch::Adam",
+            "lr": 0.0001,
+            "weight_decay": 1e-05
+        },
+        "gamma": 1.0,
+        "lambda_": 0.0001,
+        "lambda2_": 0.005
+    },
+    "class_weight_fn": {
+        "type": "exponential",
+        "cache_path": "test/data/datastadium_simple_obs_action_seq/exponential_beta0.9.pt",
+        "beta": 0.9
+    },
+    "max_epochs": 3,
+    "val_check_interval": 1.0,
+    "accumulate_grad_batches": 1
+}

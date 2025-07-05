@@ -103,6 +103,7 @@
     },
     "min_frame_len_threshold": 30,
     "max_frame_len_threshold": 600,
+    "num_offball_players": 3,
     "reward_model": {
         "type": "simple_epv"
     },
