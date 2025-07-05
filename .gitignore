@@ -4,7 +4,6 @@ test/data/**/*.arrow
 venv/
 openstarlab_rlearn.egg-info/
 dist/
-rlearn/sports/output/
 rlearn/sports/mlruns/
 rlearn/sports/__pycache__/
 rlearn/sports/soccer/__pycache__/
