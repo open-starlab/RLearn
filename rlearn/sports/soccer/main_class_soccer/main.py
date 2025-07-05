@@ -68,6 +68,7 @@ class rlearn_model_soccer:
 
         if pytest:
             game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if re.match(r"\d{10}", p.name)]
+
             train_dataset = load_dataset(
                 "json",
                 data_files=[str(Path(self.input_path) / f"{game_id}" / "events.jsonl") for game_id in game_ids],

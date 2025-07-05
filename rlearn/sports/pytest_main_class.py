@@ -1,3 +1,4 @@
+import os
 from .soccer.main_class_soccer.main import rlearn_model_soccer
 
 
@@ -31,21 +32,21 @@ def test_PVS_preprocess_data():
     ).preprocess_observation(batch_size=64)
 
 
-def test_PVS_train_data():
-    # test train model
-    RLearn_Model(state_def="PVS", config="test/config/exp_config.json").train(
-        exp_name="sarsa_attacker", run_name="test", accelerator="cpu", devices=1, strategy="auto", mlflow=False
-    )
+# def test_PVS_train_data():
+#     # test train model
+#     RLearn_Model(state_def="PVS", config="test/config/exp_config.json").train(
+#         exp_name="sarsa_attacker", run_name="test", accelerator="cpu", devices=1, strategy="auto", mlflow=False
+#     )
 
 
-def test_PVS_visualize_data():
-    # test visualize
-    RLearn_Model(state_def="PVS").visualize_data(
-        model_name="exp_config",
-        checkpoint_path="rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=1-step=2.ckpt",
-        match_id="2022100106",
-        sequence_id=0,
-    )
+# def test_PVS_visualize_data():
+#     # test visualize
+#     RLearn_Model(state_def="PVS").visualize_data(
+#         model_name="exp_config",
+#         checkpoint_path="rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=1-step=2.ckpt",
+#         match_id="2022100106",
+#         sequence_id=0,
+#     )
 
 
 # def test_EDMS_split_mini_data():
@@ -87,9 +88,9 @@ def test_PVS_visualize_data():
 
 if __name__ == "__main__":
     test_PVS_split_mini_data()
-    test_PVS_preprocess_data()
+    # test_PVS_preprocess_data()
     # test_PVS_train_data()
-    test_PVS_visualize_data()
+    # test_PVS_visualize_data()
     # test_EDMS_split_mini_data()
     # test_EDMS_preprocess_data()
     # test_EDMS_train_data()
