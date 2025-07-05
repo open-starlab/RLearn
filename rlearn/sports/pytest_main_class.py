@@ -1,5 +1,3 @@
-# from /home/c_yeung/workspace6/python/openstarlab/Event/event/sports/soccer/main_class_soccer/main.py
-import os
 from .soccer.main_class_soccer.main import rlearn_model_soccer
 
 
@@ -90,7 +88,7 @@ def test_PVS_visualize_data():
 if __name__ == "__main__":
     test_PVS_split_mini_data()
     test_PVS_preprocess_data()
-    test_PVS_train_data()
+    # test_PVS_train_data()
     test_PVS_visualize_data()
     # test_EDMS_split_mini_data()
     # test_EDMS_preprocess_data()
