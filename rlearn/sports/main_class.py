@@ -1,5 +1,4 @@
 # from /home/c_yeung/workspace6/python/openstarlab/Event/event/sports/soccer/main_class_soccer/main.py
-# from /home/c_yeung/workspace6/python/openstarlab/Event/event/sports/soccer/main_class_soccer/main.py
 from .soccer.main_class_soccer.main import rlearn_model_soccer
 
 class RLearn_Model:
