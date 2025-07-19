@@ -36,39 +36,6 @@
             "preprocess_batch_size": 32
         }
     },
-    "datamodule": {
-        "type": "jleague_rl_qmix",
-        "state_action_tokenizer": {
-            "type": "action_only",
-            "action2id": {
-                "idle": 0,
-                "right": 1,
-                "up_right": 2,
-                "up": 3,
-                "up_left": 4,
-                "left": 5,
-                "down_left": 6,
-                "down": 7,
-                "down_right": 8,
-                "shot": 9,
-                "dribble": 10,
-                "through_pass": 11,
-                "pass": 12,
-                "cross": 13,
-                "defensive_action": 14,
-                "action_15": 15,
-                "action_16": 16,
-                "action_17": 17,
-                "action_18": 18
-            },
-            "origin_pos": "center",
-            "special_tokens": [
-                "[PAD]"
-            ]
-        },
-        "num_workers": 1,
-        "batch_size": 256
-    },
     "model": {
         "type": "qmix",
         "n_agents": 11,
