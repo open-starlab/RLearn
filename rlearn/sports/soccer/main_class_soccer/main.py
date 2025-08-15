@@ -292,10 +292,9 @@ class rlearn_model_soccer:
         accelerator,
         devices,
         strategy,
-        save_q_values_csv=True,
+        save_q_values_csv=False,
         max_games_csv=1,
         max_sequences_per_game_csv=5,
-        mlflow=True,
     ):
         seed_everything(self.seed)
         exp_config = load_json(self.config)
@@ -352,14 +351,16 @@ class rlearn_model_soccer:
         else:
             class_weights = None
 
-        if mlflow:
-            mlflow_logger = pl.loggers.MLFlowLogger(
-                experiment_name=exp_name,
-                run_name=run_name,
-                save_dir=str(PROJECT_DIR / "mlruns"),
-            )
-        else:
-            mlflow_logger = False
+        tensorboard_logger = pl.loggers.TensorBoardLogger(
+            save_dir=str(PROJECT_DIR / "tensorboard_logs"),
+            name=run_name,
+        )
+
+        mlflow_logger = pl.loggers.MLFlowLogger(
+            experiment_name=exp_name,
+            run_name=run_name,
+            save_dir=str(PROJECT_DIR / "mlruns"),
+        )
 
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
             dirpath=output_dir / "checkpoints",
@@ -375,14 +376,14 @@ class rlearn_model_soccer:
         )
         trainer = pl.Trainer(
             max_epochs=exp_config["max_epochs"],
-            logger=mlflow_logger,
+            logger=[tensorboard_logger, mlflow_logger],
             callbacks=[checkpoint_callback, early_stopping_callback],
             accelerator=accelerator,
             devices=devices,
             strategy=strategy,
             deterministic=True,
             val_check_interval=exp_config["val_check_interval"] if "val_check_interval" in exp_config else None,
-            detect_anomaly=True,
+            detect_anomaly=False,
             accumulate_grad_batches=exp_config["accumulate_grad_batches"] if "accumulate_grad_batches" in exp_config else 1,
             gradient_clip_val=None,
         )
@@ -398,11 +399,10 @@ class rlearn_model_soccer:
             "lambda_": exp_config["model"]["lambda_"],
             "lambda2_": exp_config["model"]["lambda2_"],
             "class_weights": class_weights,
+            "offball_action_idx": exp_config["offball_action_idx"],
+            "onball_action_idx": exp_config["onball_action_idx"],
         }
         params_["class_weights"] = params_["class_weights"].tolist()
-
-        print(f"params_: {params_}")
-        print("class_weights:", params_["class_weights"])
 
         model = QModelBase.from_params(params_=params_)
 
@@ -536,27 +536,27 @@ if __name__ == "__main__":
     # # split data into train and test (PVS)
     # rlearn_model_soccer(
     #     state_def="PVS",
-    #     input_path=os.getcwd() + "/tests/data/datastadium/",
-    #     output_path=os.getcwd() + "/tests/data/datastadium/split/",
+    #     input_path=os.getcwd() + "/test/data/datastadium/",
+    #     output_path=os.getcwd() + "/test/data/datastadium/split/",
     # ).split_train_test()
 
     # # preprocess observation (PVS)
     # rlearn_model_soccer(
     #     state_def="PVS",
-    #     config=os.getcwd() + "/tests/config/preprocessing_dssports2020.json",
-    #     input_path=os.getcwd() + "/tests/data/datastadium/split/mini",
-    #     output_path=os.getcwd() + "/tests/data/datastadium_simple_obs_action_seq/split/mini",
+    #     config=os.getcwd() + "/test/config/preprocessing_dssports2020.json",
+    #     input_path=os.getcwd() + "/test/data/datastadium/split/mini",
+    #     output_path=os.getcwd() + "/test/data/datastadium_simple_obs_action_seq/split/mini",
     #     num_process=5,
     # ).preprocess_observation(batch_size=64)
 
     # # train model (PVS)
-    # rlearn_model_soccer(state_def="PVS", config=os.getcwd() + "/tests/config/exp_config.json").train(
-    #     exp_name="sarsa_attacker",
-    #     run_name="test",
-    #     accelerator="gpu",
-    #     devices=1,
-    #     strategy="ddp",
-    # )
+    rlearn_model_soccer(state_def="PVS", config=os.getcwd() + "/test/config/exp_config.json").train(
+        exp_name="sarsa_attacker",
+        run_name="test",
+        accelerator="gpu",
+        devices=1,
+        strategy="ddp",
+    )
 
     # # visualize data (PVS)
     # rlearn_model_soccer(
@@ -571,21 +571,21 @@ if __name__ == "__main__":
     # # split data into train and test (EDMS)
     # rlearn_model_soccer(
     #     state_def="EDMS",
-    #     input_path=os.getcwd() + "/tests/data/datastadium/",
-    #     output_path=os.getcwd() + "/tests/data/datastadium/split/",
+    #     input_path=os.getcwd() + "/test/data/datastadium/",
+    #     output_path=os.getcwd() + "/test/data/datastadium/split/",
     # ).split_train_test()
 
     # # preprocess observation (EDMS)
     # rlearn_model_soccer(
     #     state_def="EDMS",
-    #     config=os.getcwd() + "/tests/config/preprocessing_dssports2020.json",
-    #     input_path=os.getcwd() + "/tests/data/datastadium/split/mini",
-    #     output_path=os.getcwd() + "/tests/data/datastadium_simple_obs_action_seq/split/mini",
+    #     config=os.getcwd() + "/test/config/preprocessing_dssports2020.json",
+    #     input_path=os.getcwd() + "/test/data/datastadium/split/mini",
+    #     output_path=os.getcwd() + "/test/data/datastadium_simple_obs_action_seq/split/mini",
     #     num_process=5,
     # ).preprocess_observation(batch_size=64)
 
     # # train model (EDMS)
-    # rlearn_model_soccer(state_def="EDMS", config=os.getcwd() + "/tests/config/exp_config.json").train(
+    # rlearn_model_soccer(state_def="EDMS", config=os.getcwd() + "/test/config/exp_config.json").train(
     #     exp_name="sarsa_attacker",
     #     run_name="test",
     #     accelerator="gpu",
