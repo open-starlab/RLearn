@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple, cast
+from typing import Any, Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 import torch
@@ -8,7 +8,6 @@ import torch.nn.functional as F
 from rlearn.sports.soccer.models.q_model_base import QModelBase
 from rlearn.sports.soccer.modules.optimizer import LRScheduler, Optimizer
 from rlearn.sports.soccer.modules.seq2seq_encoder import Seq2SeqEncoder
-from rlearn.sports.soccer.modules.token_embedder import TokenEmbedder
 from rlearn.sports.soccer.torch.metrics.classification import get_classification_full_metrics
 
 
@@ -31,6 +30,9 @@ class AttacckerSARSAModel(QModelBase):
         lambda_: float = 0.0,
         lambda2_: float = 0.0,
         class_weights: torch.Tensor | None = None,
+        offball_action_idx: list[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8],
+        onball_action_idx: list[int] = [9, 10, 11, 12, 13],
+        defensive_action_idx: list[int] = [14],
     ):
         super().__init__()
         self.observation_dim = observation_dim
@@ -43,6 +45,9 @@ class AttacckerSARSAModel(QModelBase):
         self.lambda2_ = lambda2_
         self.class_weights = class_weights
         self.class_weights = torch.tensor(class_weights) if class_weights is not None else None
+        self.offball_action_idx = offball_action_idx
+        self.onball_action_idx = onball_action_idx
+        self.defensive_action_idx = defensive_action_idx
 
         self.encoder = Seq2SeqEncoder.from_params(sequence_encoder)
         self.fc1 = nn.Linear(self.observation_dim, self.encoder.get_input_dim())
@@ -73,19 +78,6 @@ class AttacckerSARSAModel(QModelBase):
         x = F.relu(self.fc1(batch["observation"]))  # (batch_size, input_length, encoder_input_dim)
         out = self.encoder(x)
         q_values = self.fc2(out)  # (batch_size, input_length, vocab_size)
-
-        # if q_values contains NaN values, print the indices of the NaN values and the values themselves
-        if torch.isnan(q_values).any():
-            print("q_values contains NaN values")
-            nan_indices = torch.nonzero(torch.isnan(q_values)).squeeze()
-            for idx in nan_indices:
-                idx_tuple = tuple(idx.tolist())
-                print(f"NaN at index: {idx_tuple}")
-                print(f"q_values[{idx_tuple}] = {q_values[idx_tuple]}")
-                print(f"batch['observation'][{idx_tuple[:-1]}] = {batch['observation'][idx_tuple[:-1]]}")
-                print(f"batch['action'][{idx_tuple[:-1]}] = {batch['action'][idx_tuple[:-1]]}")
-                print(f"batch['reward'][{idx_tuple[:-1]}] = {batch['reward'][idx_tuple[:-1]]}")
-                print(f"batch['mask'][{idx_tuple[:-1]}] = {batch['mask'][idx_tuple[:-1]]}")
         return q_values
 
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
@@ -93,27 +85,51 @@ class AttacckerSARSAModel(QModelBase):
         mask = batch["mask"]  # (batch_size, input_length)
         reward = batch["reward"]  # (batch_size, input_length)
         action = batch["action"]  # (batch_size, input_length)
+        on_ball = batch["onball_mask"]  # (batch_size, input_length)
 
-        q_values = self.forward(batch)  # (batch_size, input_length, vocab_size)
-        pred_q_values = q_values.argmax(dim=2)  # (batch_size, input_length)
-        td_loss = (reward[:, 1:] + self.gamma * pred_q_values[:, 1:] - pred_q_values[:, :-1]) ** 2
-        td_loss = (td_loss * mask[:, 1:]).sum() / mask[:, 1:].sum()
+        q_values_original = self.forward(batch)
+        device = q_values_original.device
+
+        q_sa_original = q_values_original.gather(2, action.unsqueeze(-1)).squeeze(-1)
+
+        with torch.no_grad():
+            td_target = reward[:, :-1] + self.gamma * q_sa_original[:, 1:]
+
+        td_error = td_target - q_sa_original[:, :-1]
+        td_loss = (td_error**2 * mask[:, :-1]).sum() / mask
         l1_loss = sum([torch.norm(param, p=1) for param in self.parameters() if param.requires_grad])
         self.log("train_td_loss", td_loss)
         self.log("train_l1_loss", l1_loss)
 
+        # Create masked Q-values for action loss calculation
+        q_values_masked = q_values_original.clone()
+        unavailable_action_value = torch.tensor(-99999.0, device=device)
+
+        # mask off-ball when on-ball, mask on-ball actions when off-ball
+        off_ball_action_mask = on_ball.unsqueeze(-1).expand(-1, -1, len(self.offball_action_idx)).to(device)
+        on_ball_action_mask = ~on_ball.unsqueeze(-1).expand(-1, -1, len(self.onball_action_idx)).to(device)
+
+        # Apply masks to Q-values for action loss calculation
+        q_values_masked[:, :, self.offball_action_idx] = torch.where(
+            off_ball_action_mask, unavailable_action_value, q_values_masked[:, :, self.offball_action_idx]
+        )
+        q_values_masked[:, :, self.onball_action_idx] = torch.where(
+            on_ball_action_mask, unavailable_action_value, q_values_masked[:, :, self.onball_action_idx]
+        )
+
         action_loss = F.cross_entropy(
-            input=q_values.reshape(-1, self.vocab_size),
+            input=q_values_masked.reshape(-1, self.vocab_size),
             target=action.reshape(-1),
             reduction="mean",
             ignore_index=self.pad_token_id,
-            weight=self.class_weights.to(q_values.device) if self.class_weights is not None else None,
+            weight=self.class_weights.to(q_values_masked.device) if self.class_weights is not None else None,
         )
 
         self.train_metrics(
-            q_values.reshape(-1, self.vocab_size),
+            q_values_masked.reshape(-1, self.vocab_size),
             action.reshape(-1),
         )
+
         self.log("train_action_loss", action_loss)
         self.log_dict(self.train_metrics)
 
@@ -126,25 +142,47 @@ class AttacckerSARSAModel(QModelBase):
         mask = batch["mask"]  # (batch_size, input_length)
         reward = batch["reward"]  # (batch_size, input_length)
         action = batch["action"]  # (batch_size, input_length)
+        on_ball = batch["onball_mask"]  # (batch_size, input_length)
 
-        q_values = self.forward(batch)  # (batch_size, input_length, vocab_size)
-        pred_q_values = q_values.argmax(dim=2)  # (batch_size, input_length)
-        td_loss = (reward[:, 1:] + self.gamma * pred_q_values[:, 1:] - pred_q_values[:, :-1]) ** 2
-        td_loss = (td_loss * mask[:, 1:]).sum() / mask[:, 1:].sum()
-        # L1 loss for parameter regularization
+        q_values_original = self.forward(batch)
+        device = q_values_original.device
+
+        q_sa_original = q_values_original.gather(2, action.unsqueeze(-1)).squeeze(-1)
+
+        with torch.no_grad():
+            td_target = reward[:, :-1] + self.gamma * q_sa_original[:, 1:]
+
+        td_error = td_target - q_sa_original[:, :-1]
+        td_loss = (td_error**2 * mask[:, :-1]).sum() / mask[:, :-1].sum()
         l1_loss = sum([torch.norm(param, p=1) for param in self.parameters() if param.requires_grad])
         self.log("val_td_loss", td_loss)
         self.log("val_l1_loss", l1_loss)
 
+        # Create masked Q-values for action loss calculation
+        q_values_masked = q_values_original.clone()
+        unavailable_action_value = torch.tensor(-99999.0, device=device)
+
+        # Fixed mask logic: mask off-ball actions when on-ball, mask on-ball actions when off-ball
+        off_ball_action_mask = on_ball.unsqueeze(-1).expand(-1, -1, len(self.offball_action_idx)).to(device)
+        on_ball_action_mask = ~on_ball.unsqueeze(-1).expand(-1, -1, len(self.onball_action_idx)).to(device)
+
+        # Apply masks to Q-values for action loss calculation
+        q_values_masked[:, :, self.offball_action_idx] = torch.where(
+            off_ball_action_mask, unavailable_action_value, q_values_masked[:, :, self.offball_action_idx]
+        )
+        q_values_masked[:, :, self.onball_action_idx] = torch.where(
+            on_ball_action_mask, unavailable_action_value, q_values_masked[:, :, self.onball_action_idx]
+        )
+
         action_loss = F.cross_entropy(
-            input=q_values.reshape(-1, self.vocab_size),
+            input=q_values_masked.reshape(-1, self.vocab_size),
             target=action.reshape(-1),
             reduction="mean",
             ignore_index=self.pad_token_id,
-            weight=self.class_weights.to(q_values.device) if self.class_weights is not None else None,
+            weight=self.class_weights.to(q_values_masked.device) if self.class_weights is not None else None,
         )
         self.val_metrics(
-            q_values.reshape(-1, self.vocab_size),
+            q_values_masked.reshape(-1, self.vocab_size),
             action.reshape(-1),
         )
         self.log("val_action_loss", action_loss)
@@ -154,7 +192,7 @@ class AttacckerSARSAModel(QModelBase):
         self.log("val_loss", total_loss)
 
         # log prediction count as a histogram
-        pred_actions = q_values.argmax(dim=2)[batch["mask"]]
+        pred_actions = q_values_masked.argmax(dim=2)[batch["mask"]]
         class_counts = torch.bincount(pred_actions, minlength=self.vocab_size).cpu().numpy()
         class_ratios = class_counts / class_counts.sum()
         fig, ax = plt.subplots()
@@ -162,8 +200,7 @@ class AttacckerSARSAModel(QModelBase):
         ax.set_xticks(range(self.vocab_size))
         ax.set_xlabel("Classes")
         ax.set_ylabel("Predicted Ratio")
-        if self.logger is not None:
-            self.logger.experiment.add_figure("Predicted Class Ratios (validation)", fig, self.current_epoch)
+        self.logger.experiment.add_figure("Predicted Class Ratios (validation)", fig, self.current_epoch)
 
         # log gold count as a histogram
         gold_actions = batch["action"][batch["mask"]]
@@ -174,8 +211,7 @@ class AttacckerSARSAModel(QModelBase):
         ax.set_xticks(range(self.vocab_size))
         ax.set_xlabel("Classes")
         ax.set_ylabel("Gold Ratio")
-        if self.logger is not None:
-            self.logger.experiment.add_figure("Gold Class Ratios (validation)", fig, self.current_epoch)
+        self.logger.experiment.add_figure("Gold Class Ratios (validation)", fig, self.current_epoch)
 
         return total_loss
 
@@ -183,47 +219,58 @@ class AttacckerSARSAModel(QModelBase):
         mask = batch["mask"]  # (batch_size, input_length)
         reward = batch["reward"]  # (batch_size, input_length)
         action = batch["action"]  # (batch_size, input_length)
+        on_ball = batch["onball_mask"]  # (batch_size, input_length)
 
-        q_values = self.forward(batch)  # (batch_size, input_length, vocab_size)
-        self.check_for_nan_inf(q_values, "q_values")
+        q_values_original = self.forward(batch)  # (batch_size, input_length, vocab_size)
+        device = q_values_original.device
 
-        pred_q_values = q_values.argmax(dim=2)  # (batch_size, input_length)
-        self.check_for_nan_inf(pred_q_values, "pred_q_values")
+        q_sa_original = q_values_original.gather(2, action.unsqueeze(-1)).squeeze(-1)
 
-        td_loss = (reward[:, 1:] + self.gamma * pred_q_values[:, 1:] - pred_q_values[:, :-1]) ** 2
-        self.check_for_nan_inf(td_loss, "td_loss before mask")
-        td_loss = (td_loss * mask[:, 1:]).sum() / mask[:, 1:].sum()
-        self.check_for_nan_inf(td_loss, "td_loss after mask")
+        with torch.no_grad():
+            td_target = reward[:, :-1] + self.gamma * q_sa_original[:, 1:]
 
+        td_error = td_target - q_sa_original[:, :-1]
+        td_loss = (td_error**2 * mask[:, :-1]).sum() / mask[:, :-1].sum()
         l1_loss = sum([torch.norm(param, p=1) for param in self.parameters() if param.requires_grad])
-        self.check_for_nan_inf(l1_loss, "l1_loss")
         self.log("test_td_loss", td_loss)
         self.log("test_l1_loss", l1_loss)
 
+        q_values_masked = q_values_original.clone()
+        unavailable_action_value = torch.tensor(-99999.0, device=device)
+
+        # Fixed mask logic: mask off-ball actions when on-ball, mask on-ball actions when off-ball
+        off_ball_action_mask = on_ball.unsqueeze(-1).expand(-1, -1, len(self.offball_action_idx)).to(device)
+        on_ball_action_mask = ~on_ball.unsqueeze(-1).expand(-1, -1, len(self.onball_action_idx)).to(device)
+
+        # Apply masks to Q-values for action loss calculation
+        q_values_masked[:, :, self.offball_action_idx] = torch.where(
+            off_ball_action_mask, unavailable_action_value, q_values_masked[:, :, self.offball_action_idx]
+        )
+        q_values_masked[:, :, self.onball_action_idx] = torch.where(
+            on_ball_action_mask, unavailable_action_value, q_values_masked[:, :, self.onball_action_idx]
+        )
+
         action_loss = F.cross_entropy(
-            input=q_values.reshape(-1, self.vocab_size),
+            input=q_values_masked.reshape(-1, self.vocab_size),
             target=action.reshape(-1),
             reduction="mean",
             ignore_index=self.pad_token_id,
-            weight=self.class_weights.to(q_values.device) if self.class_weights is not None else None,
+            weight=self.class_weights.to(q_values_masked.device) if self.class_weights is not None else None,
         )
-        self.check_for_nan_inf(action_loss, "action_loss")
-
-        # import pdb; pdb.set_trace()
 
         self.test_metrics(
-            q_values.reshape(-1, self.vocab_size),
+            q_values_masked.reshape(-1, self.vocab_size),
             action.reshape(-1),
         )
+
         self.log("test_action_loss", action_loss)
         self.log_dict(self.test_metrics)
 
         total_loss = td_loss + self.lambda_ * l1_loss + self.lambda2_ * action_loss
-        self.check_for_nan_inf(total_loss, "total_loss")
         self.log("test_loss", total_loss)
 
         # log prediction count as a histogram
-        pred_actions = q_values.argmax(dim=2)[batch["mask"]]
+        pred_actions = q_values_masked.argmax(dim=2)[batch["mask"]]
         class_counts = torch.bincount(pred_actions, minlength=self.vocab_size).cpu().numpy()
         class_ratios = class_counts / class_counts.sum()
         fig, ax = plt.subplots()
@@ -231,8 +278,7 @@ class AttacckerSARSAModel(QModelBase):
         ax.set_xticks(range(self.vocab_size))
         ax.set_xlabel("Classes")
         ax.set_ylabel("Predicted Ratio")
-        if self.logger is not None:
-            self.logger.experiment.add_figure("Predicted Class Ratios (test)", fig, self.current_epoch)
+        self.logger.experiment.add_figure("Predicted Class Ratios (test)", fig, self.current_epoch)
 
         # log gold count as a histogram
         gold_actions = batch["action"][batch["mask"]]
@@ -243,8 +289,7 @@ class AttacckerSARSAModel(QModelBase):
         ax.set_xticks(range(self.vocab_size))
         ax.set_xlabel("Classes")
         ax.set_ylabel("Gold Ratio")
-        if self.logger is not None:
-            self.logger.experiment.add_figure("Gold Class Ratios (test)", fig, self.current_epoch)
+        self.logger.experiment.add_figure("Gold Class Ratios (test)", fig, self.current_epoch)
 
         return total_loss
 
