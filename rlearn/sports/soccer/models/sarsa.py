@@ -96,10 +96,10 @@ class AttacckerSARSAModel(QModelBase):
             td_target = reward[:, :-1] + self.gamma * q_sa_original[:, 1:]
 
         td_error = td_target - q_sa_original[:, :-1]
-        td_loss = (td_error**2 * mask[:, :-1]).sum() / mask
+        td_loss = (td_error**2 * mask[:, :-1]).sum() / mask[:, :-1].sum()
         l1_loss = sum([torch.norm(param, p=1) for param in self.parameters() if param.requires_grad])
-        self.log("train_td_loss", td_loss)
-        self.log("train_l1_loss", l1_loss)
+        self.log("train_td_loss", td_loss, sync_dist=True)
+        self.log("train_l1_loss", l1_loss, sync_dist=True)
 
         # Create masked Q-values for action loss calculation
         q_values_masked = q_values_original.clone()
@@ -130,11 +130,11 @@ class AttacckerSARSAModel(QModelBase):
             action.reshape(-1),
         )
 
-        self.log("train_action_loss", action_loss)
+        self.log("train_action_loss", action_loss, sync_dist=True)
         self.log_dict(self.train_metrics)
 
         total_loss = td_loss + self.lambda_ * l1_loss + self.lambda2_ * action_loss
-        self.log("train_total_loss", total_loss)
+        self.log("train_total_loss", total_loss, sync_dist=True)
 
         return total_loss
 
@@ -155,8 +155,8 @@ class AttacckerSARSAModel(QModelBase):
         td_error = td_target - q_sa_original[:, :-1]
         td_loss = (td_error**2 * mask[:, :-1]).sum() / mask[:, :-1].sum()
         l1_loss = sum([torch.norm(param, p=1) for param in self.parameters() if param.requires_grad])
-        self.log("val_td_loss", td_loss)
-        self.log("val_l1_loss", l1_loss)
+        self.log("val_td_loss", td_loss, sync_dist=True)
+        self.log("val_l1_loss", l1_loss, sync_dist=True)
 
         # Create masked Q-values for action loss calculation
         q_values_masked = q_values_original.clone()
@@ -185,11 +185,11 @@ class AttacckerSARSAModel(QModelBase):
             q_values_masked.reshape(-1, self.vocab_size),
             action.reshape(-1),
         )
-        self.log("val_action_loss", action_loss)
+        self.log("val_action_loss", action_loss, sync_dist=True)
         self.log_dict(self.val_metrics)
 
         total_loss = td_loss + self.lambda_ * l1_loss + self.lambda2_ * action_loss
-        self.log("val_loss", total_loss)
+        self.log("val_loss", total_loss, sync_dist=True)
 
         # log prediction count as a histogram
         pred_actions = q_values_masked.argmax(dim=2)[batch["mask"]]
@@ -232,8 +232,8 @@ class AttacckerSARSAModel(QModelBase):
         td_error = td_target - q_sa_original[:, :-1]
         td_loss = (td_error**2 * mask[:, :-1]).sum() / mask[:, :-1].sum()
         l1_loss = sum([torch.norm(param, p=1) for param in self.parameters() if param.requires_grad])
-        self.log("test_td_loss", td_loss)
-        self.log("test_l1_loss", l1_loss)
+        self.log("test_td_loss", td_loss, sync_dist=True)
+        self.log("test_l1_loss", l1_loss, sync_dist=True)
 
         q_values_masked = q_values_original.clone()
         unavailable_action_value = torch.tensor(-99999.0, device=device)
@@ -263,11 +263,11 @@ class AttacckerSARSAModel(QModelBase):
             action.reshape(-1),
         )
 
-        self.log("test_action_loss", action_loss)
+        self.log("test_action_loss", action_loss, sync_dist=True)
         self.log_dict(self.test_metrics)
 
         total_loss = td_loss + self.lambda_ * l1_loss + self.lambda2_ * action_loss
-        self.log("test_loss", total_loss)
+        self.log("test_loss", total_loss, sync_dist=True)
 
         # log prediction count as a histogram
         pred_actions = q_values_masked.argmax(dim=2)[batch["mask"]]
