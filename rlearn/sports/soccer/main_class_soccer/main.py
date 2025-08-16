@@ -299,7 +299,6 @@ class rlearn_model_soccer:
         seed_everything(self.seed)
         exp_config = load_json(self.config)
         config_copy = deepcopy(exp_config)
-        logger.info(f"exp_config: {exp_config}")
         output_dir = OUTPUT_DIR / exp_name / run_name
         output_dir.mkdir(exist_ok=True, parents=True)
 
@@ -386,6 +385,7 @@ class rlearn_model_soccer:
             detect_anomaly=False,
             accumulate_grad_batches=exp_config["accumulate_grad_batches"] if "accumulate_grad_batches" in exp_config else 1,
             gradient_clip_val=None,
+            log_every_n_steps=1,
         )
 
         params_ = {
@@ -441,8 +441,6 @@ class rlearn_model_soccer:
             unique_sequence_ids = set(sequence_ids)
 
             print(f"Unique sequence_ids for game_id {game_id_to_find}: {unique_sequence_ids}")
-
-        # import pdb; pdb.set_trace()
 
         print(f"start loading {match_id} {sequence_id}")
 
