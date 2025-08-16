@@ -300,7 +300,7 @@ class rlearn_model_soccer:
         seed_everything(self.seed)
         exp_config = load_json(self.config)
         config_copy = deepcopy(exp_config)
-        
+
         # Auto-detect device and set defaults for test mode
         if accelerator is None:
             accelerator = "gpu" if torch.cuda.is_available() else "cpu"
@@ -308,14 +308,14 @@ class rlearn_model_soccer:
             devices = 1
         if strategy is None:
             strategy = "auto" if accelerator == "cpu" else "ddp"
-        
+
         # Override settings for test mode
         if test_mode:
             exp_config["max_epochs"] = 1
             exp_config["datamodule"]["batch_size"] = min(exp_config["datamodule"]["batch_size"], 32)
             accelerator = "cpu"
             strategy = "auto"
-        
+
         output_dir = OUTPUT_DIR / exp_name / run_name
         output_dir.mkdir(exist_ok=True, parents=True)
 
@@ -484,10 +484,15 @@ class rlearn_model_soccer:
                 "lambda2_": exp_config["model"]["lambda2_"],
             }
         )
-        state_dict = torch.load(checkpoint_path, weights_only=False)["state_dict"]
+        checkpoint = (
+            torch.load(checkpoint_path, weights_only=False)
+            if not test_mode
+            else torch.load(checkpoint_path, weights_only=False, map_location=torch.device("cpu"))
+        )
+        state_dict = checkpoint["state_dict"]
         model.load_state_dict(state_dict)
         model.eval()
-        
+
         # Auto-detect device
         device = "cuda" if torch.cuda.is_available() and not test_mode else "cpu"
         model.to(device)
