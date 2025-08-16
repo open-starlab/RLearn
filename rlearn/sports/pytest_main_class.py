@@ -1,4 +1,3 @@
-import os
 from .soccer.main_class_soccer.main import rlearn_model_soccer
 
 
@@ -32,21 +31,32 @@ def test_PVS_preprocess_data():
     ).preprocess_observation(batch_size=64)
 
 
-# def test_PVS_train_data():
-#     # test train model
-#     RLearn_Model(state_def="PVS", config="test/config/exp_config.json").train(
-#         exp_name="sarsa_attacker", run_name="test", accelerator="cpu", devices=1, strategy="auto", mlflow=False
-#     )
+def test_PVS_train_data():
+    # test train model
+    RLearn_Model(state_def="PVS", config="test/config/exp_config.json").train_and_test(
+        exp_name="sarsa_attacker", run_name="test", test_mode=True
+    )
 
 
-# def test_PVS_visualize_data():
-#     # test visualize
-#     RLearn_Model(state_def="PVS").visualize_data(
-#         model_name="exp_config",
-#         checkpoint_path="rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=1-step=2.ckpt",
-#         match_id="2022100106",
-#         sequence_id=0,
-#     )
+def test_PVS_visualize_data():
+    # First run a minimal training to create a checkpoint
+    model = RLearn_Model(state_def="PVS", config="test/config/exp_config.json")
+    model.train_and_test(exp_name="sarsa_attacker", run_name="test", test_mode=True)
+    
+    # test visualize (use a dummy checkpoint path for testing)
+    import os
+    checkpoint_dir = "rlearn/sports/output/sarsa_attacker/test/checkpoints"
+    if os.path.exists(checkpoint_dir) and os.listdir(checkpoint_dir):
+        checkpoint_files = [f for f in os.listdir(checkpoint_dir) if f.endswith('.ckpt')]
+        if checkpoint_files:
+            checkpoint_path = os.path.join(checkpoint_dir, checkpoint_files[0])
+            RLearn_Model(state_def="PVS").visualize_data(
+                model_name="exp_config",
+                checkpoint_path=checkpoint_path,
+                match_id="2022100106",
+                sequence_id=0,
+                test_mode=True,
+            )
 
 
 # def test_EDMS_split_mini_data():
@@ -88,9 +98,9 @@ def test_PVS_preprocess_data():
 
 if __name__ == "__main__":
     test_PVS_split_mini_data()
-    # test_PVS_preprocess_data()
-    # test_PVS_train_data()
-    # test_PVS_visualize_data()
+    test_PVS_preprocess_data()
+    test_PVS_train_data()
+    test_PVS_visualize_data()
     # test_EDMS_split_mini_data()
     # test_EDMS_preprocess_data()
     # test_EDMS_train_data()

@@ -32,6 +32,8 @@ dependencies = [
     "matplotlib==3.9.0",
     "matplotsoccer>=0.0.8",
     "mlflow>=2.16.0",
+    "tensorboard>=2.18.0",
+    "tensorboardX>=2.6.0.0",
     "opencv-python>=4.10.0",
     "pyarrow>=4.0.0,<20.0.0",
     "pydantic>=2.9.0",

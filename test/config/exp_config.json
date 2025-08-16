@@ -90,5 +90,26 @@
     },
     "max_epochs": 3,
     "val_check_interval": 1.0,
-    "accumulate_grad_batches": 1
+    "accumulate_grad_batches": 1,
+    "offball_action_idx": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+    ],
+    "onball_action_idx": [
+        9,
+        10,
+        11,
+        12,
+        13
+    ],
+    "defensive_action_idx": [
+        14
+    ]
 }

@@ -1,11 +1,8 @@
-import hashlib
 import logging
 from copy import deepcopy
-from pathlib import Path
 from typing import Any, Dict
 
 import torch
-from datasets import load_from_disk
 
 from rlearn.sports.soccer.dataclass import (
     SimpleObservation_PVS,
@@ -37,14 +34,7 @@ class JLeagueRLAttackerDataModule(DataModule):
         self.num_workers = num_workers
         self.state_action_tokenizer = StateActionTokenizerBase.from_params(state_action_tokenizer)
 
-        self.onball_action = {
-            "pass",
-            "shot",
-            "cross",
-            "dribble",
-            "through_pass",
-            "defensive_action",
-        }
+        self.onball_action = [9, 10, 11, 12, 13]
 
     @classmethod
     def preprocess_data(
@@ -182,7 +172,9 @@ class JLeagueRLAttackerDataModule(DataModule):
             action[i, :length] = torch.tensor(instance["action"], dtype=torch.long)
             reward[i, :length] = torch.tensor(instance["reward"], dtype=torch.float32)
             mask[i, :length] = 1
-            onball_mask[i, :length] = 1 if torch.tensor(instance["action"], dtype=torch.long) in self.onball_action else 0
+            for j in range(length):
+                action_idx = instance["action"][j]
+                onball_mask[i, j] = 1 if action_idx in self.onball_action else 0
 
         batch = {
             "observation": observation,
