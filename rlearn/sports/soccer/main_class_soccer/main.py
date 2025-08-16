@@ -285,20 +285,37 @@ class rlearn_model_soccer:
         dataset.save_to_disk(str(self.output_path))
         logging.info(f"output_path: {self.output_path} (elapsed: {time.time() - start:.2f} sec)")
 
-    def train(
+    def train_and_test(
         self,
         exp_name,
         run_name,
-        accelerator,
-        devices,
-        strategy,
+        accelerator=None,
+        devices=None,
+        strategy=None,
         save_q_values_csv=False,
         max_games_csv=1,
         max_sequences_per_game_csv=5,
+        test_mode=False,
     ):
         seed_everything(self.seed)
         exp_config = load_json(self.config)
         config_copy = deepcopy(exp_config)
+        
+        # Auto-detect device and set defaults for test mode
+        if accelerator is None:
+            accelerator = "gpu" if torch.cuda.is_available() else "cpu"
+        if devices is None:
+            devices = 1
+        if strategy is None:
+            strategy = "auto" if accelerator == "cpu" else "ddp"
+        
+        # Override settings for test mode
+        if test_mode:
+            exp_config["max_epochs"] = 1
+            exp_config["datamodule"]["batch_size"] = min(exp_config["datamodule"]["batch_size"], 32)
+            accelerator = "cpu"
+            strategy = "auto"
+        
         output_dir = OUTPUT_DIR / exp_name / run_name
         output_dir.mkdir(exist_ok=True, parents=True)
 
@@ -423,7 +440,7 @@ class rlearn_model_soccer:
                 max_sequences_per_game=max_sequences_per_game_csv,
             )
 
-    def visualize_data(self, model_name, checkpoint_path, match_id, sequence_id):
+    def visualize_data(self, model_name, checkpoint_path, match_id, sequence_id, test_mode=False):
         exp_config_path = os.getcwd() + f"/test/config/{model_name}.json"
         exp_config = load_json(exp_config_path)
         test_file_path = Path(os.getcwd() + "/" + exp_config["dataset"]["test_filename"])
@@ -470,7 +487,10 @@ class rlearn_model_soccer:
         state_dict = torch.load(checkpoint_path, weights_only=False)["state_dict"]
         model.load_state_dict(state_dict)
         model.eval()
-        model.to("cuda")
+        
+        # Auto-detect device
+        device = "cuda" if torch.cuda.is_available() and not test_mode else "cpu"
+        model.to(device)
 
         q_values_list = []
 
@@ -498,7 +518,7 @@ class rlearn_model_soccer:
             if data["game_id"] == match_id and data["sequence_id"] == sequence_id:
                 player = data["sequence"][0]["player"]
                 q_values = (
-                    model(datamodule.transfer_batch_to_device(batch, "cuda", 0)).squeeze(0).detach().cpu()
+                    model(datamodule.transfer_batch_to_device(batch, device, 0)).squeeze(0).detach().cpu()
                 )  # (seq_len, num_actions)
                 action_idx = batch["action"].squeeze(0)  # (seq_len, )
 
@@ -527,6 +547,55 @@ class rlearn_model_soccer:
             sequence_id=sequence_id,
         )
 
+    def run_rlearn(
+        self,
+        run_split_train_test=False,
+        run_preprocess_observation=False,
+        run_train_and_test=False,
+        run_visualize_data=False,
+        pytest=False,
+        batch_size=64,
+        exp_name=None,
+        run_name=None,
+        accelerator="gpu",
+        devices=1,
+        strategy="ddp",
+        save_q_values_csv=False,
+        max_games_csv=1,
+        max_sequences_per_game_csv=5,
+        model_name=None,
+        checkpoint_path=None,
+        match_id=None,
+        sequence_id=None,
+    ):
+        if run_split_train_test:
+            self.split_train_test(pytest=pytest)
+
+        if run_preprocess_observation:
+            self.preprocess_observation(batch_size=batch_size)
+
+        if run_train_and_test:
+            self.train_and_test(
+                exp_name=exp_name,
+                run_name=run_name,
+                accelerator=accelerator,
+                devices=devices,
+                strategy=strategy,
+                save_q_values_csv=save_q_values_csv,
+                max_games_csv=max_games_csv,
+                max_sequences_per_game_csv=max_sequences_per_game_csv,
+                test_mode=pytest,
+            )
+
+        if run_visualize_data:
+            self.visualize_data(
+                model_name=model_name,
+                checkpoint_path=checkpoint_path,
+                match_id=match_id,
+                sequence_id=sequence_id,
+                test_mode=pytest,
+            )
+
 
 if __name__ == "__main__":
     import os
@@ -548,13 +617,13 @@ if __name__ == "__main__":
     # ).preprocess_observation(batch_size=64)
 
     # # train model (PVS)
-    rlearn_model_soccer(state_def="PVS", config=os.getcwd() + "/test/config/exp_config.json").train(
-        exp_name="sarsa_attacker",
-        run_name="test",
-        accelerator="gpu",
-        devices=1,
-        strategy="ddp",
-    )
+    # rlearn_model_soccer(state_def="PVS", config=os.getcwd() + "/test/config/exp_config.json").train(
+    #     exp_name="sarsa_attacker",
+    #     run_name="test",
+    #     accelerator="gpu",
+    #     devices=1,
+    #     strategy="ddp",
+    # )
 
     # # visualize data (PVS)
     # rlearn_model_soccer(
@@ -600,5 +669,3 @@ if __name__ == "__main__":
     #     match_id="2022100106",
     #     sequence_id=0,
     # )
-
-    print("Done")
