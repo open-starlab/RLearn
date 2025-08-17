@@ -8,6 +8,7 @@ from rlearn.sports.soccer.dataclass import (
     SimpleObservation_PVS,
     SimpleObservation_EDMS,
 )
+from rlearn.sports.soccer.constant import ONBALL_ACTION_INDICES
 from rlearn.sports.soccer.modules.datamodule.datamodule import DataModule
 from rlearn.sports.soccer.modules.state_action_tokenizer.state_action_tokenizer import StateActionTokenizerBase
 
@@ -34,7 +35,7 @@ class JLeagueRLAttackerDataModule(DataModule):
         self.num_workers = num_workers
         self.state_action_tokenizer = StateActionTokenizerBase.from_params(state_action_tokenizer)
 
-        self.onball_action = [9, 10, 11, 12, 13]
+        self.onball_action = ONBALL_ACTION_INDICES
 
     @classmethod
     def preprocess_data(

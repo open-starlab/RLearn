@@ -3,12 +3,15 @@ from bidict import bidict
 FIELD_LENGTH = 105.0  # unit: meters
 FIELD_WIDTH = 68.0  # unit: meters
 STOP_THRESHOLD = 0.1  # unit: m/s
+UNAVAILABLE_ACTION_QVALUE = -99999.0
 
 HOME_AWAY_MAP = {
     0: "BALL",
     1: "HOME",
     2: "AWAY",
 }
+
+ONBALL_ACTION_INDICES = [9, 10, 11, 12, 13, 14]
 
 PLAYER_ROLE_MAP = bidict(
     {
@@ -22,7 +25,7 @@ PLAYER_ROLE_MAP = bidict(
 )
 
 INPUT_EVENT_COLUMNS = [
-    'game_id',
+    "game_id",
     "frame_id",
     "absolute_time",
     "match_status_id",
@@ -60,7 +63,7 @@ INPUT_EVENT_COLUMNS = [
 ]
 
 INPUT_EVENT_COLUMNS_LALIGA = [
-    'game_id',
+    "game_id",
     "frame_id",
     "absolute_time",
     "match_status_id",
@@ -98,7 +101,7 @@ INPUT_EVENT_COLUMNS_LALIGA = [
 ]
 
 INPUT_EVENT_COLUMNS_LDS_JLEAGUE = [
-    'game_id',
+    "game_id",
     "frame_id",
     "absolute_time",
     "match_status_id",

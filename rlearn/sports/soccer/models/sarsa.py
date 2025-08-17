@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from rlearn.sports.soccer.constant import UNAVAILABLE_ACTION_QVALUE
 from rlearn.sports.soccer.models.q_model_base import QModelBase
 from rlearn.sports.soccer.modules.optimizer import LRScheduler, Optimizer
 from rlearn.sports.soccer.modules.seq2seq_encoder import Seq2SeqEncoder
@@ -103,7 +104,7 @@ class AttacckerSARSAModel(QModelBase):
 
         # Create masked Q-values for action loss calculation
         q_values_masked = q_values_original.clone()
-        unavailable_action_value = torch.tensor(-99999.0, device=device)
+        unavailable_action_value = torch.tensor(UNAVAILABLE_ACTION_QVALUE, device=device)
 
         # mask off-ball when on-ball, mask on-ball actions when off-ball
         off_ball_action_mask = on_ball.unsqueeze(-1).expand(-1, -1, len(self.offball_action_idx)).to(device)
@@ -160,7 +161,7 @@ class AttacckerSARSAModel(QModelBase):
 
         # Create masked Q-values for action loss calculation
         q_values_masked = q_values_original.clone()
-        unavailable_action_value = torch.tensor(-99999.0, device=device)
+        unavailable_action_value = torch.tensor(UNAVAILABLE_ACTION_QVALUE, device=device)
 
         # Fixed mask logic: mask off-ball actions when on-ball, mask on-ball actions when off-ball
         off_ball_action_mask = on_ball.unsqueeze(-1).expand(-1, -1, len(self.offball_action_idx)).to(device)
@@ -200,7 +201,8 @@ class AttacckerSARSAModel(QModelBase):
         ax.set_xticks(range(self.vocab_size))
         ax.set_xlabel("Classes")
         ax.set_ylabel("Predicted Ratio")
-        self.logger.experiment.add_figure("Predicted Class Ratios (validation)", fig, self.current_epoch)
+        if self.logger is not None:
+            self.logger.experiment.add_figure("Predicted Class Ratios (validation)", fig, self.current_epoch)
 
         # log gold count as a histogram
         gold_actions = batch["action"][batch["mask"]]
@@ -211,7 +213,8 @@ class AttacckerSARSAModel(QModelBase):
         ax.set_xticks(range(self.vocab_size))
         ax.set_xlabel("Classes")
         ax.set_ylabel("Gold Ratio")
-        self.logger.experiment.add_figure("Gold Class Ratios (validation)", fig, self.current_epoch)
+        if self.logger is not None:
+            self.logger.experiment.add_figure("Gold Class Ratios (validation)", fig, self.current_epoch)
 
         return total_loss
 
@@ -236,7 +239,7 @@ class AttacckerSARSAModel(QModelBase):
         self.log("test_l1_loss", l1_loss, sync_dist=True)
 
         q_values_masked = q_values_original.clone()
-        unavailable_action_value = torch.tensor(-99999.0, device=device)
+        unavailable_action_value = torch.tensor(UNAVAILABLE_ACTION_QVALUE, device=device)
 
         # Fixed mask logic: mask off-ball actions when on-ball, mask on-ball actions when off-ball
         off_ball_action_mask = on_ball.unsqueeze(-1).expand(-1, -1, len(self.offball_action_idx)).to(device)
@@ -278,7 +281,8 @@ class AttacckerSARSAModel(QModelBase):
         ax.set_xticks(range(self.vocab_size))
         ax.set_xlabel("Classes")
         ax.set_ylabel("Predicted Ratio")
-        self.logger.experiment.add_figure("Predicted Class Ratios (test)", fig, self.current_epoch)
+        if self.logger is not None:
+            self.logger.experiment.add_figure("Predicted Class Ratios (test)", fig, self.current_epoch)
 
         # log gold count as a histogram
         gold_actions = batch["action"][batch["mask"]]
@@ -289,7 +293,8 @@ class AttacckerSARSAModel(QModelBase):
         ax.set_xticks(range(self.vocab_size))
         ax.set_xlabel("Classes")
         ax.set_ylabel("Gold Ratio")
-        self.logger.experiment.add_figure("Gold Class Ratios (test)", fig, self.current_epoch)
+        if self.logger is not None:
+            self.logger.experiment.add_figure("Gold Class Ratios (test)", fig, self.current_epoch)
 
         return total_loss
 
