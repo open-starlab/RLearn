@@ -2,7 +2,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, Optional
-import numpy as np  
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -17,7 +17,6 @@ class DQNConfig:
     lr: float = 5e-4
     weight_decay: float = 0.0
     grad_clip: float = 10.0
-
     gamma: float = 0.99
     target_update_freq: int = 1000
     tau: float = 1.0
@@ -27,10 +26,10 @@ class DQNConfig:
     use_double: bool = True
     use_cql: bool = True
     cql_alpha: float = 1.0
-
+    td_mode: str = "q_learning"
+    lambda_as: float = 0.0
     loss: str = "huber"
     huber_delta: float = 1.0
-
     amp: bool = False
     seed: int = 42
 
@@ -74,19 +73,37 @@ def compute_td_loss(
     use_double: bool,
     loss: str = "huber",
     huber_delta: float = 1.0,
+    *,
+    td_mode: str = "q_learning",
+    next_actions: Optional[Tensor] = None,
 ) -> Tensor:
+    """
+    td_mode:
+      - "q_learning": standard (Double-)DQN target: r + γ * max_a' Q_target(s', a')
+      - "sarsa": SARSA-style target using logged next action a_{t+1} from the batch:
+                 r + γ * Q_target(s', a_{t+1})
+                 (requires next_actions tensor of shape (B,))
+    """
     device = q_values.device
     batch_idx = torch.arange(q_values.size(0), device=device)
+
+    # Q(s,a) prediction
     q_pred = q_values[batch_idx, actions]
 
     with torch.no_grad():
-        if use_double:
-            next_q_online = q_net(next_obs)
-            next_actions = next_q_online.argmax(dim=1)
-            next_q_target = target_net(next_obs)
-            q_next = next_q_target[batch_idx, next_actions]
-        else:
-            q_next = target_net(next_obs).max(dim=1).values
+        if td_mode == "sarsa":
+            if next_actions is None:
+                raise ValueError("td_mode='sarsa' requires batch['next_actions'] (logged a_{t+1}).")
+            q_next_all = target_net(next_obs)                 # (B, A)
+            q_next = q_next_all[batch_idx, next_actions]      # Q_target(s', a_{t+1})
+        else:  # "q_learning"
+            if use_double:
+                next_q_online = q_net(next_obs)               # online selects
+                next_acts = next_q_online.argmax(dim=1)
+                next_q_target = target_net(next_obs)          # target evaluates
+                q_next = next_q_target[batch_idx, next_acts]
+            else:
+                q_next = target_net(next_obs).max(dim=1).values
 
     q_target = rewards + gamma * q_next * (1.0 - dones)
 
@@ -123,6 +140,7 @@ class DQNAgent:
         self.gamma = cfg.gamma
         self.use_double = cfg.use_double
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.action_dim = action_dim
 
         self.q_net = DQNNetwork(obs_dim, action_dim, cfg.hidden_dim).to(self.device)
         self.target_net = DQNNetwork(obs_dim, action_dim, cfg.hidden_dim).to(self.device)
@@ -132,11 +150,9 @@ class DQNAgent:
         self.optimizer = torch.optim.Adam(
             self.q_net.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay
         )
-        # New-style torch.amp API
         self._scaler = torch.amp.GradScaler("cuda", enabled=bool(cfg.amp))
         self.step_count = 0
 
-    # Convenience so training scripts can do: agent = DQNAgent(...).to(device)
     def to(self, device: str | torch.device) -> "DQNAgent":
         dev = torch.device(device)
         self.device = dev
@@ -158,20 +174,51 @@ class DQNAgent:
         next_obs = batch['next_obs'].to(self.device).float()
         dones = batch['dones'].to(self.device).float()
 
+        # Optional: logged next actions for SARSA-style TD
+        next_actions = batch.get('next_actions', None)
+        if next_actions is not None:
+            next_actions = next_actions.to(self.device).long()
+
         with torch.amp.autocast("cuda", enabled=bool(cfg.amp)):
             q_values = self.q_net(obs)
+
+            # TD loss (mode selectable)
             td_loss = compute_td_loss(
                 q_values, actions, rewards, next_obs, dones,
                 self.q_net, self.target_net, cfg.gamma, cfg.use_double,
-                loss=cfg.loss, huber_delta=cfg.huber_delta
+                loss=cfg.loss, huber_delta=cfg.huber_delta,
+                td_mode=cfg.td_mode, next_actions=next_actions
             )
             loss = td_loss
             logs = {"td_loss": float(td_loss.item())}
 
+            # CQL (optional)
             if cfg.use_cql:
                 cql_loss = compute_cql_loss(q_values, actions, cfg.cql_alpha)
                 loss = loss + cql_loss
                 logs["cql_loss"] = float(cql_loss.item())
+
+            # Action supervision (unchanged)
+            as_loss = torch.zeros((), device=self.device)
+            if cfg.lambda_as > 0.0 and ('actions' in batch):
+                acts_raw = actions  # (B,)
+                A = self.action_dim
+                valid = (acts_raw >= 0) & (acts_raw < A)  # (B,)
+                if valid.any():
+                    ce_all = F.cross_entropy(
+                        input=q_values, target=acts_raw.clamp(0, A - 1), reduction="none"
+                    )
+                    valid_f = valid.float()
+                    denom = valid_f.sum().clamp_min(1.0)
+                    as_loss = (ce_all * valid_f).sum() / denom
+                else:
+                    as_loss = torch.zeros((), device=self.device)
+            else:
+                as_loss = torch.zeros((), device=self.device)
+
+            if cfg.lambda_as > 0.0:
+                loss = loss + cfg.lambda_as * as_loss
+                logs["as_loss"] = float(as_loss.item())
 
         self.optimizer.zero_grad(set_to_none=True)
         self._scaler.scale(loss).backward()
