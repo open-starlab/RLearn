@@ -384,12 +384,29 @@ class QMIXOfflineModel(nn.Module):
         if self.q_clip > 0:
             q = q.clamp(-self.q_clip, self.q_clip)
 
+        # --- action-supervision loss (explicit if/else guard) ---
         as_loss = torch.zeros((), device=device)
-        if self.lambda_as > 0.0 and 'actions' in batch:
-            acts = batch['actions'].long().clamp_min(0).clamp_max(A - 1)
-            ce_input = q.view(B * T * N, A)
-            ce_target = acts.view(B * T * N)
-            as_loss = F.cross_entropy(ce_input, ce_target)
+        if self.lambda_as > 0.0 and ('actions' in batch):
+            acts_raw = batch['actions'].long()  # (B, T, N)
+            # valid labels are in [0, A-1]. anything else is ignored.
+            valid = (acts_raw >= 0) & (acts_raw < A)  # (B, T, N)
+
+            if valid.any():
+                ce_input = q.view(B * T * N, A)  # logits
+                # clamp just to keep CE happy; masked out later
+                ce_target = acts_raw.clamp(0, A - 1).view(B * T * N)
+
+                ce_all = F.cross_entropy(ce_input, ce_target, reduction="none")
+                valid_f = valid.view(-1).float()
+                denom = valid_f.sum().clamp_min(1.0)
+                as_loss = (ce_all * valid_f).sum() / denom
+            else:
+                # no valid labels available → no action loss contribution
+                as_loss = torch.zeros((), device=device)
+        else:
+            # lambda_as == 0 or no 'actions' in batch → no action loss contribution
+            as_loss = torch.zeros((), device=device)
+        # --- end action-supervision loss ---
 
         acts = batch['actions'].long().clamp_(0, A - 1)
         q_taken = q.gather(-1, acts.unsqueeze(-1)).squeeze(-1)
