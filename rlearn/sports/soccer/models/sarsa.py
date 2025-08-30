@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import logging
 
 from rlearn.sports.soccer.constant import UNAVAILABLE_ACTION_QVALUE
 from rlearn.sports.soccer.models.q_model_base import QModelBase
@@ -136,7 +137,7 @@ class AttacckerSARSAModel(QModelBase):
 
         total_loss = td_loss + self.lambda_ * l1_loss + self.lambda2_ * action_loss
         self.log("train_total_loss", total_loss, sync_dist=True)
-
+        logging.info(f"[Epoch {self.current_epoch} | Batch {batch_idx}] train total loss: {total_loss.item():.6f}")
         return total_loss
 
     def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
@@ -191,7 +192,7 @@ class AttacckerSARSAModel(QModelBase):
 
         total_loss = td_loss + self.lambda_ * l1_loss + self.lambda2_ * action_loss
         self.log("val_loss", total_loss, sync_dist=True)
-
+        logging.info(f"[Epoch {self.current_epoch} | Batch {batch_idx}] validation total loss: {total_loss.item():.6f}")
         # log prediction count as a histogram
         pred_actions = q_values_masked.argmax(dim=2)[batch["mask"]]
         class_counts = torch.bincount(pred_actions, minlength=self.vocab_size).cpu().numpy()
