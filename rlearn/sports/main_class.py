@@ -32,7 +32,7 @@ if __name__ == "__main__":
     ).preprocess_observation(batch_size=64)
 
     # test train model
-    RLearn_Model(state_def="PVS", config=os.getcwd() + "/test/config/exp_config.json").train(
+    RLearn_Model(state_def="PVS", config=os.getcwd() + "/test/config/exp_config.json").train_and_test(
         exp_name="sarsa_attacker",
         run_name="test",
         accelerator="gpu",

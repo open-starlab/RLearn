@@ -11,6 +11,7 @@ from datasets import load_dataset, load_from_disk
 from sklearn.model_selection import train_test_split
 import pytorch_lightning as pl
 import torch
+import warnings
 from lightning_lite.utilities.seed import seed_everything
 
 
@@ -35,6 +36,8 @@ from ..application.q_values_csv import save_q_values_to_csv
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+warnings.filterwarnings("ignore")
 
 
 class rlearn_model_soccer:
@@ -403,6 +406,7 @@ class rlearn_model_soccer:
             accumulate_grad_batches=exp_config["accumulate_grad_batches"] if "accumulate_grad_batches" in exp_config else 1,
             gradient_clip_val=None,
             log_every_n_steps=1,
+            enable_progress_bar=False,
         )
 
         params_ = {
