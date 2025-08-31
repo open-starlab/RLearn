@@ -18,8 +18,8 @@ if __name__ == "__main__":
     # test split_data
     RLearn_Model(
         state_def="PVS",
-        input_path=os.getcwd() + "/test/data/datastadium/",
-        output_path=os.getcwd() + "/test/data/datastadium/split/",
+        input_path=os.getcwd() + "/test/data/fifawc/preprocess_data/",
+        output_path=os.getcwd() + "/test/data/fifawc/preprocess_data/split/",
     ).split_train_test()
 
     # test preprocess observation data
