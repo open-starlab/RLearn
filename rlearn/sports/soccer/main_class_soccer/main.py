@@ -69,7 +69,7 @@ class rlearn_model_soccer:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         if pytest:
-            game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if p.is_dir()]
+            game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if p.is_dir() and p.name.isdigit()]
 
             train_dataset = load_dataset(
                 "json",
@@ -78,7 +78,9 @@ class rlearn_model_soccer:
                 num_proc=self.num_process,
             )
         else:
-            game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if p.is_dir()]
+            game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if p.is_dir() and p.name.isdigit()]
+            if len(game_ids) == 0:
+                raise ValueError(f"No numeric game directories found in {self.input_path}. Please check if the correct data path is specified.")
             train_game_ids, test_val_game_ids = train_test_split(game_ids, test_size=0.5, random_state=self.seed)
             test_game_ids, val_game_ids = train_test_split(test_val_game_ids, test_size=0.1, random_state=self.seed)
 
