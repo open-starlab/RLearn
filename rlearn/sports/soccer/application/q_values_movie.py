@@ -3,60 +3,66 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotsoccer as mps
 import os
-from pathlib import Path
-import japanize_matplotlib
 from io import StringIO
 import cv2
 import ast
 from sklearn.preprocessing import MinMaxScaler
 import matplotlib.gridspec as gridspec
 import glob
-from ast import literal_eval
-from math import pi
-from matplotlib.colors import Normalize
-import matplotlib.cm as cm
 
-onball_action_names = [
-    'pass',
-    'through_pass',
-    'shot',
-    'cross',
-    'dribble',
-    'defense'
-]
+onball_action_names = ["pass", "through_pass", "shot", "cross", "dribble", "defense"]
 
-offball_action_names = [
-    'idle',
-    'up',
-    'up_right',
-    'right',
-    'down_right',
-    'down',
-    'down_left',
-    'left',
-    'up_left'
-]
+offball_action_names = ["idle", "up", "up_right", "right", "down_right", "down", "down_left", "left", "up_left"]
 
 offball_action_idx = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 onball_action_idx = [9, 10, 11, 12, 13, 14]
 
 
-def preprocess_tracking_data(df, sequence_id):
-    df_sequence = df[df['sequence_id'] == sequence_id].copy()
-    df_sequence.loc[:, 'raw_state'] = df_sequence['events'].apply(lambda x: x['state'])
+def preprocess_tracking_data(df, sequence_id, state_def="PVS"):
+    df_sequence = df[df["sequence_id"] == sequence_id].copy()
+    if state_def == "PVS":
+        df_sequence.loc[:, "raw_state"] = df_sequence["events"].apply(lambda x: x["state"])
 
-    df_sequence = df_sequence.drop(columns=['events'])
-    df_sequence.reset_index(drop=True, inplace=True)
+        df_sequence = df_sequence.drop(columns=["events"])
+        df_sequence.reset_index(drop=True, inplace=True)
 
-    df_sequence['ball_x'] = df_sequence['raw_state'].apply(lambda x: x['ball']['position']['x'])
-    df_sequence['ball_y'] = df_sequence['raw_state'].apply(lambda x: x['ball']['position']['y'])
+        df_sequence["ball_x"] = df_sequence["raw_state"].apply(lambda x: x["ball"]["position"]["x"])
+        df_sequence["ball_y"] = df_sequence["raw_state"].apply(lambda x: x["ball"]["position"]["y"])
 
+        df_sequence["attack_team_position"] = df_sequence["raw_state"].apply(
+            lambda x: [player["position"] for player in x["attack_players"]]
+        )
+        df_sequence["attack_team_player"] = df_sequence["raw_state"].apply(
+            lambda x: [player["player_name"] for player in x["attack_players"]]
+        )
+        df_sequence["attack_team_action"] = df_sequence["raw_state"].apply(
+            lambda x: [player["action"] for player in x["attack_players"]]
+        )
+        df_sequence["defence_team_position"] = df_sequence["raw_state"].apply(
+            lambda x: [player["position"] for player in x["defense_players"]]
+        )
+        df_sequence["defence_team_player"] = df_sequence["raw_state"].apply(
+            lambda x: [player["player_name"] for player in x["defense_players"]]
+        )
+    elif state_def == "EDMS":
+        df_sequence["ball_x"] = df_sequence["raw_state"].apply(lambda x: x["ball"]["position"]["x"])
+        df_sequence["ball_y"] = df_sequence["raw_state"].apply(lambda x: x["ball"]["position"]["y"])
 
-    df_sequence['attack_team_position'] = df_sequence['raw_state'].apply(lambda x: [player['position'] for player in x['attack_players']])
-    df_sequence['attack_team_player'] = df_sequence['raw_state'].apply(lambda x: [player['player_name'] for player in x['attack_players']])
-    df_sequence['attack_team_action'] = df_sequence['raw_state'].apply(lambda x: [player['action'] for player in x['attack_players']])
-    df_sequence['defence_team_position'] = df_sequence['raw_state'].apply(lambda x: [player['position'] for player in x['defense_players']])
-    df_sequence['defence_team_player'] = df_sequence['raw_state'].apply(lambda x: [player['player_name'] for player in x['defense_players']])
+        df_sequence["attack_team_position"] = df_sequence["raw_state"].apply(
+            lambda x: [player["position"] for player in x["attack_players"]]
+        )
+        df_sequence["attack_team_player"] = df_sequence["raw_state"].apply(
+            lambda x: [player["player_name"] for player in x["attack_players"]]
+        )
+        df_sequence["attack_team_action"] = df_sequence["raw_state"].apply(
+            lambda x: [player["action"] for player in x["attack_players"]]
+        )
+        df_sequence["defence_team_position"] = df_sequence["raw_state"].apply(
+            lambda x: [player["position"] for player in x["defense_players"]]
+        )
+        df_sequence["defence_team_player"] = df_sequence["raw_state"].apply(
+            lambda x: [player["player_name"] for player in x["defense_players"]]
+        )
 
     return df_sequence
 
@@ -65,15 +71,62 @@ def safe_literal_eval(val):
     try:
         return ast.literal_eval(val)
     except (ValueError, SyntaxError):
-        val = val.replace('nan', 'math.nan')
+        val = val.replace("nan", "math.nan")
         val = eval(val)
         return val
 
 
 def preprocess_q_values(q_values):
-    q_values['q_value'] = q_values['q_value'].apply(lambda x: x[7:-1])
-    q_values['q_value'] = q_values['q_value'].apply(lambda x: np.array(safe_literal_eval(x.replace('\n', ''))) if isinstance(x, str) else x)
+    q_values["q_value"] = q_values["q_value"].apply(lambda x: x[7:-1])
+    q_values["q_value"] = q_values["q_value"].apply(
+        lambda x: np.array(safe_literal_eval(x.replace("\n", ""))) if isinstance(x, str) else x
+    )
     return q_values
+
+
+def normalize_values(values):
+    """Normalize values to 0-1 range"""
+    values = np.array(values)
+    min_val = np.min(values)
+    max_val = np.max(values)
+    if max_val - min_val == 0:
+        return np.zeros_like(values)
+    return (values - min_val) / (max_val - min_val)
+
+
+def create_radar_chart(ax, values, labels, title, color="blue", rotate=False):
+    """Create a radar chart with improved visualization for similar values"""
+    N = len(values)
+    angles = [n / float(N) * 2 * np.pi for n in range(N)]
+    angles += angles[:1]
+    values = list(values) + [values[0]]
+
+    # Ensure labels and values have the same length
+    if len(labels) != len(values) - 1:  # -1 because values has duplicate first value
+        # Truncate or pad labels to match values
+        if len(labels) > len(values) - 1:
+            labels = labels[: len(values) - 1]
+        else:
+            labels = labels + [f"Action_{i}" for i in range(len(labels), len(values) - 1)]
+
+    if rotate:
+        ax.set_theta_offset(0)
+    else:
+        ax.set_theta_offset(np.pi / 2)
+    ax.set_theta_direction(-1)
+    ax.plot(angles, values, "o-", linewidth=3, color=color, markersize=8)
+    ax.fill(angles, values, alpha=0.25, color=color)
+    ax.set_xticks(angles[:-1])  # Exclude the duplicate point
+    ax.set_xticklabels(labels, fontsize=10)
+    ax.set_ylim(0, 1)
+    ax.set_title(title, y=1.08, fontsize=12, fontweight="bold")
+    ax.grid(True)
+
+
+def split_q_values(values, offball_action_idx, onball_action_idx):
+    offball_values = values[offball_action_idx]
+    onball_values = values[onball_action_idx]
+    return offball_values, onball_values
 
 
 def normalize_list(values):
@@ -82,16 +135,10 @@ def normalize_list(values):
     return scaler.fit_transform(values).flatten()
 
 
-def split_q_values(values, offball_action_idx, onball_action_idx): 
-    offball_values = values[offball_action_idx] 
-    onball_values = values[onball_action_idx] 
-    return offball_values, onball_values
-
-
 def offside(attackers, defenders):
-    attackers_x = [attacker['x'] for attacker in attackers]
-    offside_attackers = [0]*len(attackers)
-    defenders_min_x = min([defender['x'] for defender in defenders])
+    attackers_x = [attacker["x"] for attacker in attackers]
+    offside_attackers = [0] * len(attackers)
+    defenders_min_x = min([defender["x"] for defender in defenders])
     offside_line = 52.5 if defenders_min_x < 52.5 else defenders_min_x
 
     for i, attacker_x in enumerate(attackers_x):
@@ -101,135 +148,139 @@ def offside(attackers, defenders):
     return offside_attackers
 
 
-def plot_q_values(df_sequence, q_values, name, team_name, match_id, sequence_id):
-    offball_directions = ["U", "U-L", "L", "B-L", "B", "B-R", "R", "U-R"]
-    onball_actions = onball_action_names
-    offball_q_values = 0
-    angles_offball = np.linspace(0, 2 * np.pi, len(offball_directions) + 1)
-    angles_onball = np.linspace(0, 2 * np.pi, len(onball_actions) + 1)
+def plot_q_values(df_sequence, q_values, name, team_name, match_id, sequence_id, output_path=None, test_mode=False):
+    # Define action labels matching players_q_value_visualization.py structure
+    offball_labels = ["left", "up_left", "up", "up_right", "right", "down_right", "down", "down_left"]
+    onball_labels = ["shot", "dribble", "cross", "pass"]
 
-    cmap = cm.viridis  # colormap (e.g., viridis)
-    yticks_offball, yticks_onball = [], []
-    for idx, (data, q_value) in enumerate(zip(df_sequence.iterrows(), q_values.iterrows())):
+    # Limit to 5 frames in test mode
+    data_pairs = list(zip(df_sequence.iterrows(), q_values.iterrows()))
+    if test_mode:
+        data_pairs = data_pairs[:5]
+
+    for idx, (data, q_value) in enumerate(data_pairs):
+        # Create visualization layout like players_q_value_visualization.py
         fig = plt.figure(figsize=(16, 9))
-        gs = gridspec.GridSpec(2, 2, height_ratios=[1, 1], width_ratios=[1, 1])
+        gs = gridspec.GridSpec(2, 3, hspace=0.4, width_ratios=[6, 4, 1])
 
-        ax1 = fig.add_subplot(gs[:, 0])
-        ax2 = fig.add_subplot(gs[:, 1], polar=True)
-        mps.field(ax=ax1, show=False, color="green")
-        ball_x, ball_y = data[1]['ball_x'] + 52.5, data[1]['ball_y'] + 34
+        # Main field plot - spans both rows in left column
+        ax_field = fig.add_subplot(gs[:, 0])
+        mps.field(ax=ax_field, show=False, color="green")
 
-        if ball_x - 25 < -2:
-            field_x_min = -2
-            field_x_max = 55
-        elif ball_x + 25 > 107:
-            field_x_min = 45
-            field_x_max = 80
+        # Get ball position with coordinate transformation and scaling
+        ball_x_raw = data[1]["ball_x"]
+        ball_y_raw = data[1]["ball_y"]
+
+        # Scale up coordinates to spread across field (multiply by field scale factor)
+        # Since coordinates are clustered in ~0.5m range, scale by ~100 to spread across field
+        scale_factor = 100
+        ball_x = (ball_x_raw * scale_factor) + 52.5
+        ball_y = (ball_y_raw * scale_factor) + 34
+
+        ax_field.plot(ball_x, ball_y, "ko", markersize=10, label="Ball")
+
+        # Plot attacking players with correct coordinates
+        for position, player in zip(data[1]["attack_team_position"], data[1]["attack_team_player"]):
+            # Coordinate transformation with scaling: field coordinates to visualization coordinates
+            x_raw = position["x"]
+            y_raw = position["y"]
+
+            # Apply the same scaling factor to spread players across the field
+            x = (x_raw * scale_factor) + 52.5
+            y = (y_raw * scale_factor) + 34
+
+            if player == name:  # Highlight target player
+                ax_field.plot(x, y, "ro", markersize=16, markeredgecolor="yellow", markeredgewidth=3)
+                ax_field.text(x, y + 2, player, ha="center", va="bottom", fontsize=12, fontweight="bold")
+            else:
+                ax_field.plot(x, y, "ro", markersize=12, alpha=0.5)
+
+        # Plot defending players
+        for position, player in zip(data[1]["defence_team_position"], data[1]["defence_team_player"]):
+            x_raw = position["x"]
+            y_raw = position["y"]
+
+            # Apply the same scaling factor
+            x = (x_raw * scale_factor) + 52.5
+            y = (y_raw * scale_factor) + 34
+
+            ax_field.plot(x, y, "bo", markersize=12, alpha=0.5)
+
+            if player == name:  # Highlight if target player is on defense
+                ax_field.plot(x, y, "bo", markersize=16, markeredgecolor="yellow", markeredgewidth=3)
+                ax_field.text(x, y + 2, player, ha="center", va="bottom", fontsize=12, fontweight="bold")
+
+        # Center field around ball position with ±25m range
+        if ball_x - 25 < 0:
+            field_x_min = 0
+            field_x_max = 50
+        elif ball_x + 25 > 105:
+            field_x_min = 55
+            field_x_max = 105
         else:
-            field_x_min = ball_x-25
-            field_x_max = ball_x+25
-        ax1.plot(ball_x, ball_y, 'ko', markersize=7)
-        ax1.set_xlim(field_x_min, field_x_max)
-        ax1.set_ylim(-2, 70)
-        ax1.set_title(f'{team_name}_{sequence_id}_{name}_{idx:04d}', fontsize=15)
-        
-        for position, player in zip(data[1]['attack_team_position'], data[1]['attack_team_player']):
-            ax1.plot(position['x'] + 52.5, position['y'] + 34, 'ro', markersize=7)
-            if player == name and field_x_min <= position['x'] + 52.5 <= field_x_max:
-                ax1.text(position['x'] + 52, position['y'] + 35, player, fontsize=15)
-        for position, player in zip(data[1]['defence_team_position'], data[1]['defence_team_player']):
-            ax1.plot(position['x'] + 52.5, position['y'] + 34, 'bo', markersize=7)
+            field_x_min = ball_x - 25
+            field_x_max = ball_x + 25
 
-        ax1.set_xticks([])
-        ax1.set_yticks([])
-        ax1.set_title(f'{data[1]["team_name_attack"]} vs {data[1]["team_name_defense"]}', fontsize=15)
+        ax_field.set_xlim(field_x_min, field_x_max)
+        ax_field.set_ylim(0, 68)
+        ax_field.set_title(f"{data[1]['team_name_attack']} vs {data[1]['team_name_defense']}", fontsize=16, fontweight="bold")
+        ax_field.set_xticks([])
+        ax_field.set_yticks([])
 
-        idle_q_values = q_value[1]['q_value_offball'][0].copy()
-        offball_q_values = q_value[1]['q_value_offball'][1:].copy()
+        # Get Q-values and split into onball/offball
+        idle_q_value = q_value[1]["q_value_offball"][0]
+        offball_q_values = q_value[1]["q_value_offball"][1:].copy()
+        onball_q_values = q_value[1]["q_value_onball"].copy()
 
+        # Handle NaN values
         offball_q_values = np.nan_to_num(offball_q_values, nan=0.0, posinf=0.0, neginf=0.0)
-        idle_q_values = np.nan_to_num(idle_q_values, nan=0.0, posinf=0.0, neginf=0.0)
+        onball_q_values = np.nan_to_num(onball_q_values, nan=0.0, posinf=0.0, neginf=0.0)
+        idle_q_value = np.nan_to_num(idle_q_value, nan=0.0, posinf=0.0, neginf=0.0)
 
-        ax2.set_xticks(angles_offball[:-1])
-        ax2.set_xticklabels(offball_directions, color='grey', fontsize=15)
-        yticks_offball = np.round(np.arange(-1, 1.2, 0.5), 2)
-        ax2.set_yticks(yticks_offball)
-        ax2.set_yticklabels([f'{ytick:.2f}' for ytick in yticks_offball], color='grey', fontsize=8)
-        ax2.set_ylim(-1, max(offball_q_values)+0.3)        
-        # ax2.set_theta_offset(np.pi / 2)
-        ax2.set_title(f'Q Values for Offball Actions ({name})', fontsize=15)
-        
-        norm = Normalize(vmin=min(offball_q_values), vmax=max(offball_q_values))
-        colors = cmap(norm(offball_q_values))
+        # Ensure arrays have correct length for radar charts
+        if len(offball_q_values) != len(offball_labels):
+            # Pad or truncate to match labels
+            if len(offball_q_values) < len(offball_labels):
+                offball_q_values = np.pad(
+                    offball_q_values, (0, len(offball_labels) - len(offball_q_values)), "constant", constant_values=0
+                )
+            else:
+                offball_q_values = offball_q_values[: len(offball_labels)]
 
-        for i in range(len(offball_q_values)):
-            ax2.bar(
-                angles_offball[i], 
-                offball_q_values[i], 
-                width=(angles_offball[i + 1]-0.2 - angles_offball[i]),
-                color=colors[i],
-                edgecolor='black',
-                alpha=0.7,
-            )
+        if len(onball_q_values) != len(onball_labels):
+            # Pad or truncate to match labels
+            if len(onball_q_values) < len(onball_labels):
+                onball_q_values = np.pad(
+                    onball_q_values, (0, len(onball_labels) - len(onball_q_values)), "constant", constant_values=0
+                )
+            else:
+                onball_q_values = onball_q_values[: len(onball_labels)]
 
-            ax2.text(
-                angles_offball[i], 
-                max(offball_q_values), 
-                f'{offball_q_values[i]:.3g}'
-            )
+        # Normalize for radar charts
+        offball_normalized = normalize_values(offball_q_values)
+        onball_normalized = normalize_values(onball_q_values)
 
-        scatter_size = max(idle_q_values * 1000, 0)
-        ax2.scatter(0, -1, s=scatter_size, c='blue', alpha=0.7, label=f'{idle_q_values}')
-        ax2.text(0, -1, f"{idle_q_values:.3g}", ha='center', va='center', color='white', fontsize=8)
-        
+        # Create onball radar chart - top middle
+        ax_onball = fig.add_subplot(gs[0, 1], projection="polar")
+        create_radar_chart(ax_onball, onball_normalized, onball_labels, f"Onball Q-values\n{name}", color="blue")
 
+        # Create offball radar chart - bottom middle
+        ax_offball = fig.add_subplot(gs[1, 1], projection="polar")
+        create_radar_chart(ax_offball, offball_normalized, offball_labels, f"Offball Q-values\n{name}", color="red")
 
-        # onball_q_values = q_value[1]['q_value_onball'].copy()
-        # norm = Normalize(vmin=min(onball_q_values), vmax=max(onball_q_values))
-        # colors = cmap(norm(onball_q_values))
-
-        # for i in range(len(onball_q_values)):
-        #     ax3.bar(
-        #         angles_onball[i],
-        #         onball_q_values[i], 
-        #         width=(angles_onball[i + 1]-0.2 - angles_onball[i]), 
-        #         color=colors[i],
-        #         edgecolor='black',
-        #         alpha=0.7,
-        #     )
-
-        #     ax3.text(
-        #         angles_onball[i],
-        #         max(onball_q_values),
-        #         f'{onball_q_values[i]:.3g}'
-        #     )
-
-        # ax3.set_xticks(angles_onball[:-1]) 
-        # ax3.set_xticklabels(onball_actions, color='black', fontsize=10)
-        # yticks_onball = np.round(np.arange(-1, 1.2, 0.5), 2)
-        # # print(yticks_onball)
-        # ax3.set_yticks(yticks_onball)
-        # ax3.set_yticklabels([f'{ytick:.2f}' for ytick in yticks_onball], color='grey', fontsize=8)
-        # ax3.set_ylim(-1, max(onball_q_values)+0.3)
-        # ax3.set_title(f'Q Values for Onball Actions ({name})', fontsize=12)
-        # ax3.set_theta_offset(np.pi/2)
-
-        output_path = os.getcwd()+f'/tests/data/figures/{match_id}/'
+        # Save frame
+        output_path = os.getcwd() + f"/test/data/figures/{match_id}/" if output_path is None else output_path
         if not os.path.exists(output_path):
             os.makedirs(output_path)
-        plt.tight_layout()
-        plt.show()
-        plt.savefig(output_path+f'frame_{name}_{sequence_id}_{idx:04d}.png')
+        plt.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.05, hspace=0.4, wspace=0.3)
+        plt.savefig(output_path + f"frame_{name}_{sequence_id}_{idx:04d}.png", dpi=150, bbox_inches="tight")
         plt.close(fig)
-
-        if idx == 10:
-            break
 
 
 def movie_from_images(image_files, output_file):
     frame = cv2.imread(image_files[0])
     height, width, _ = frame.shape
-    video = cv2.VideoWriter(output_file, cv2.VideoWriter_fourcc(*'MJPG'), 1, (width, height))
+    video = cv2.VideoWriter(output_file, cv2.VideoWriter_fourcc(*"MJPG"), 1, (width, height))
 
     for image in image_files:
         video.write(cv2.imread(image))
@@ -241,13 +292,12 @@ def movie_from_images(image_files, output_file):
         os.remove(image)
 
 
-def create_movie(q_values_path, match_id, sequence_id):
+def create_movie(q_values_path, match_id, sequence_id, events_file_path, output_path=None, test_mode=False):
     target_file_path = q_values_path
-    tracking_data_path = os.getcwd()+f'/test/data/dss/preprocess_data/{match_id}/events.jsonl' # tracking data path preprocessed in SAR Package
 
     df = pd.DataFrame()
     data_list = []
-    with open(tracking_data_path, 'r') as file:
+    with open(events_file_path, "r") as file:
         for line in file:
             data_list.append(pd.read_json(StringIO(line)))
 
@@ -260,24 +310,35 @@ def create_movie(q_values_path, match_id, sequence_id):
     q_values = preprocess_q_values(q_values)
 
     # create new columns for offball and onball q_values
-    q_values[['q_value_offball', 'q_value_onball']] = pd.DataFrame(q_values['q_value'].apply(lambda x: split_q_values(x, offball_action_idx, onball_action_idx)).tolist(), index=q_values.index)
+    q_values[["q_value_offball", "q_value_onball"]] = pd.DataFrame(
+        q_values["q_value"].apply(lambda x: split_q_values(x, offball_action_idx, onball_action_idx)).tolist(),
+        index=q_values.index,
+    )
 
     # standardize q_values
-    q_values['q_value_offball'] = q_values['q_value_offball'].apply(normalize_list)
-    q_values['q_value_onball'] = q_values['q_value_onball'].apply(normalize_list)
+    q_values["q_value_offball"] = q_values["q_value_offball"].apply(normalize_list)
+    q_values["q_value_onball"] = q_values["q_value_onball"].apply(normalize_list)
 
-    player_name = q_values['player_name'].unique()
+    player_name = q_values["player_name"].unique()
+
+    # Limit to first player only in test mode
+    if test_mode:
+        player_name = player_name[:1]
+
     print(player_name)
-    for i in range(len(player_name)):
+    # Process only one player in test mode
+    for i in range(1 if test_mode else len(player_name)):
         name = player_name[i]
-        team_name = q_values['team_name'][q_values['player_name'] == name].values[0]
+        team_name = q_values["team_name"][q_values["player_name"] == name].values[0]
 
         print(f"player name: {name}")
-        plot_q_values(df_sequence, q_values, name, team_name, match_id, sequence_id)
-        image_files = sorted(glob.glob(os.getcwd()+f'/test/data/figures/{match_id}/frame_{name}_{sequence_id}*.png'))
-        output_dir = os.getcwd()+f'/test/data/movies/'
+        plot_q_values(
+            df_sequence, q_values, name, team_name, match_id, sequence_id, output_path=output_path, test_mode=test_mode
+        )
+        image_file_path = os.getcwd() + f"/test/data/figures/{match_id}/" if output_path is None else output_path
+        image_files = sorted(glob.glob(image_file_path + f"/frame_{name}_{sequence_id}*.png"))
+        output_dir = os.getcwd() + "/test/data/movies/" if output_path is None else output_path
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        output_file = os.path.join(output_dir, f'{match_id}_{sequence_id}_{name}.avi')
-        # movie_from_images(image_files, output_file)
-        break
+        output_file = os.path.join(output_dir, f"{match_id}_{sequence_id}_{name}.avi")
+        movie_from_images(image_files, output_file)
