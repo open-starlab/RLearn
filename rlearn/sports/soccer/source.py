@@ -28,7 +28,7 @@ class JLeagueDataSource(DataSource):
         yield from self._data
 
 
-class JLeagueSimpleObservationActionSequenceDataSource(DataSource):
+class SimpleObservationActionSequenceDataSource(DataSource):
     def __init__(self, data_name: str, subset: str) -> None:
         self.data_name = data_name
         self.subset = subset
@@ -36,11 +36,8 @@ class JLeagueSimpleObservationActionSequenceDataSource(DataSource):
         self.__build_data()
 
     def __build_data(self) -> None:
-        for observation_action in load_jsonlines(
-            DATA_DIR / "preprocessed" / f"{self.data_name}" / f"{self.subset}.jsonl"
-        ):
+        for observation_action in load_jsonlines(DATA_DIR / "preprocessed" / f"{self.data_name}" / f"{self.subset}.jsonl"):
             self._data.append(SimpleObservationActionSequence.from_dict(observation_action))
 
     def collect(self) -> Iterator[SimpleObservationActionSequence]:
         yield from self._data
-

@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-@DataModule.register("jleague_rl_attacker")
-class JLeagueRLAttackerDataModule(DataModule):
+@DataModule.register("rl_attacker")
+class RLAttackerDataModule(DataModule):
     def __init__(
         self,
         state_action_tokenizer: Dict[str, Any],
