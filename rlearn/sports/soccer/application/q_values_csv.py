@@ -15,7 +15,7 @@ def save_q_values_to_csv(
     Args:
         model: Trained Q-learning model
         datamodule: DataModule containing the datasets
-        state_def: State definition ("EDMF" or "PVF")
+        state_def: State definition ("EDMS" or "PVS")
         output_dir: Output directory for saving files
         max_games: Maximum number of games to process (None for all games)
         max_sequences_per_game: Maximum number of sequences per game (None for all sequences)
@@ -82,15 +82,15 @@ def save_q_values_to_csv(
         all_players_df = []
 
         for player_data in players_data:
-            if state_def == "EDMF":
-                player_df = _create_edmf_dataframe(
+            if state_def == "EDMS":
+                player_df = _create_edms_dataframe(
                     player_data["data"],
                     player_data["q_values"],
                     player_data["action_idx"],
                     player_data["q_values_for_actions"],
                 )
-            elif state_def == "PVF":
-                player_df = _create_pvf_dataframe(
+            elif state_def == "PVS":
+                player_df = _create_pvs_dataframe(
                     player_data["data"],
                     player_data["q_values"],
                     player_data["action_idx"],
@@ -114,8 +114,8 @@ def save_q_values_to_csv(
     logger.info("Q-values CSV generation completed.")
 
 
-def _create_edmf_dataframe(data, q_values, action_idx, q_values_for_actions):
-    """Create DataFrame for EDMF state definition."""
+def _create_edms_dataframe(data, q_values, action_idx, q_values_for_actions):
+    """Create DataFrame for EDMS state definition."""
     q_values_df = pd.DataFrame(
         index=range(len(data["sequence"])),
         columns=[
@@ -177,8 +177,8 @@ def _create_edmf_dataframe(data, q_values, action_idx, q_values_for_actions):
     return q_values_df
 
 
-def _create_pvf_dataframe(data, q_values, action_idx, q_values_for_actions):
-    """Create DataFrame for PVF state definition."""
+def _create_pvs_dataframe(data, q_values, action_idx, q_values_for_actions):
+    """Create DataFrame for PVS state definition."""
     player = data["sequence"][0]["player"]
 
     q_values_df = pd.DataFrame(
