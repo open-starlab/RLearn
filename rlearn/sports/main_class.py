@@ -18,16 +18,16 @@ if __name__ == "__main__":
     # test split_data
     RLearn_Model(
         state_def="PVS",
-        input_path=os.getcwd() + "/test/data/datastadium/",
-        output_path=os.getcwd() + "/test/data/datastadium/split/",
+        input_path=os.getcwd() + "/test/data/dss/",
+        output_path=os.getcwd() + "/test/data/dss/split/",
     ).run_rlearn(run_split_train_test=True)
 
     # test preprocess observation data
     RLearn_Model(
         state_def="PVS",
         config=os.getcwd() + "/test/config/preprocessing_dssports2020.json",
-        input_path=os.getcwd() + "/test/data/datastadium/split/mini",
-        output_path=os.getcwd() + "/test/data/datastadium_simple_obs_action_seq/split/mini",
+        input_path=os.getcwd() + "/test/data/dss/split/mini",
+        output_path=os.getcwd() + "/test/data/dss_simple_obs_action_seq/split/mini",
         num_process=5,
     ).run_rlearn(run_preprocess_observation=True, batch_size=64)
 
@@ -62,8 +62,8 @@ if __name__ == "__main__":
     RLearn_Model(
         state_def="PVS",
         config=os.getcwd() + "/test/config/preprocessing_dssports2020.json",
-        input_path=os.getcwd() + "/test/data/datastadium/",
-        output_path=os.getcwd() + "/test/data/datastadium/split/",
+        input_path=os.getcwd() + "/test/data/dss/",
+        output_path=os.getcwd() + "/test/data/dss/split/",
         num_process=5,
     ).run_rlearn(
         run_split_train_test=True,
