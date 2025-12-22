@@ -59,7 +59,7 @@ class rlearn_model_soccer:
         self.input_path = input_path
         self.output_path = output_path
 
-    def split_train_test(self, pytest=False):
+    def split_train_test(self, test_mode=False):
         # Load data into a Dataset
 
         output_dir = Path(self.output_path)
@@ -69,7 +69,7 @@ class rlearn_model_soccer:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        if pytest:
+        if test_mode:
             game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if re.match(r"\d{10}", p.name)]
 
             train_dataset = load_dataset(
@@ -445,7 +445,15 @@ class rlearn_model_soccer:
             )
 
     def visualize_data(
-        self, model_name, exp_config_path, checkpoint_path, events_file_path, match_id, sequence_id, test_mode=False
+        self,
+        model_name,
+        exp_config_path,
+        checkpoint_path,
+        tracking_file_path,
+        match_id,
+        sequence_id,
+        test_mode=False,
+        viz_style="radar",
     ):
         exp_config = load_json(exp_config_path)
         test_file_path = Path(os.getcwd() + "/" + exp_config["dataset"]["test_filename"])
@@ -503,6 +511,7 @@ class rlearn_model_soccer:
                 columns=[
                     "game_id",
                     "sequence_id",
+                    "frame_num",
                     "team_name",
                     "player_name",
                     "q_value",
@@ -528,6 +537,7 @@ class rlearn_model_soccer:
                 for i, _ in enumerate(data["sequence"]):
                     q_values_df.loc[i, "game_id"] = data["game_id"]
                     q_values_df.loc[i, "sequence_id"] = data["sequence_id"]
+                    q_values_df.loc[i, "frame_num"] = i
                     q_values_df.loc[i, "player_name"] = player["player_name"]
                     q_values_df.loc[i, "q_value"] = q_values[i, :]
                     q_values_df.loc[i, "action_idx"] = action_idx[i]
@@ -545,8 +555,9 @@ class rlearn_model_soccer:
             q_values_path=q_values_df_path,
             match_id=match_id,
             sequence_id=sequence_id,
-            events_file_path=events_file_path,
+            tracking_file_path=tracking_file_path,
             test_mode=test_mode,
+            viz_style=viz_style,
         )
 
     def run_rlearn(
@@ -555,7 +566,7 @@ class rlearn_model_soccer:
         run_preprocess_observation=False,
         run_train_and_test=False,
         run_visualize_data=False,
-        pytest=False,
+        test_mode=False,
         batch_size=64,
         exp_name=None,
         run_name=None,
@@ -568,9 +579,10 @@ class rlearn_model_soccer:
         model_name=None,
         exp_config_path=None,
         checkpoint_path=None,
-        events_file_path=None,
+        tracking_file_path=None,
         match_id=None,
         sequence_id=None,
+        viz_style="radar",
     ):
         # Store original paths
         original_input_path = self.input_path
@@ -578,11 +590,11 @@ class rlearn_model_soccer:
         original_config = self.config
 
         if run_split_train_test:
-            self.split_train_test(pytest=pytest)
+            self.split_train_test(test_mode=test_mode)
 
         if run_preprocess_observation:
             # Process datasets based on test mode
-            if pytest:
+            if test_mode:
                 # Test mode: only process mini dataset
                 datasets_to_process = ["mini"]
             else:
@@ -622,7 +634,7 @@ class rlearn_model_soccer:
                 # Full pipeline: update config to use preprocessed data paths
                 config_data = load_json(exp_config_path)
 
-                if pytest:
+                if test_mode:
                     # Test mode: use mini dataset for all splits
                     mini_path = str(Path(preprocessed_output_base) / "mini")
                     config_data["dataset"]["train_filename"] = mini_path
@@ -653,7 +665,7 @@ class rlearn_model_soccer:
                 save_q_values_csv=save_q_values_csv,
                 max_games_csv=max_games_csv,
                 max_sequences_per_game_csv=max_sequences_per_game_csv,
-                test_mode=pytest,
+                test_mode=test_mode,
             )
 
             # Auto-detect generated checkpoint for visualization
@@ -674,10 +686,11 @@ class rlearn_model_soccer:
                     model_name=model_name,
                     exp_config_path=exp_config_path,
                     checkpoint_path=checkpoint_path,
-                    events_file_path=events_file_path,
+                    tracking_file_path=tracking_file_path,
                     match_id=match_id,
                     sequence_id=sequence_id,
-                    test_mode=pytest,
+                    test_mode=test_mode,
+                    viz_style=viz_style,
                 )
 
         # Restore original paths
@@ -723,7 +736,8 @@ if __name__ == "__main__":
         model_name="exp_config",
         exp_config_path=os.getcwd() + "/test/config/exp_config.json",
         checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=2-step=3-v19.ckpt",
-        events_file_path=os.getcwd() + "/test/data/dss/preprocess_data/2022100106/events.jsonl",
-        match_id="2022100106",
-        sequence_id=1,
+        tracking_file_path=os.getcwd() + "/test/data/dss/preprocess_data/2022100106/events.jsonl",
+        match_id="1",
+        sequence_id=4,
+        viz_style="radar",
     )

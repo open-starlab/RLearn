@@ -17,7 +17,7 @@ class RLearn_Model:
 #         state_def="PVS",
 #         input_path="test/data/dss/preprocess_data/",
 #         output_path="test/data/dss/preprocess_data/split/",
-#     ).run_rlearn(run_split_train_test=True, pytest=True)
+#     ).run_rlearn(run_split_train_test=True, test_mode=True)
 
 
 # def test_PVS_preprocess_only():
@@ -28,7 +28,7 @@ class RLearn_Model:
 #         input_path="test/data/dss/preprocess_data/split/mini",
 #         output_path="test/data/dss_simple_obs_action_seq/split/mini",
 #         num_process=3,
-#     ).run_rlearn(run_preprocess_observation=True, batch_size=64, pytest=True)
+#     ).run_rlearn(run_preprocess_observation=True, batch_size=64, test_mode=True)
 
 
 # def test_PVS_train_only():
@@ -38,7 +38,7 @@ class RLearn_Model:
 #         exp_name="sarsa_attacker",
 #         run_name="test_train_only",
 #         exp_config_path="test/config/exp_config.json",
-#         pytest=True,
+#         test_mode=True,
 #     )
 
 
@@ -61,10 +61,10 @@ def test_PVS_full_pipeline():
         run_name="full_pipeline_test",
         exp_config_path="test/config/exp_config.json",
         model_name="exp_config",
-        events_file_path="test/data/dss/preprocess_data/2022100106/events.jsonl",
+        tracking_file_path="test/data/dss/preprocess_data/2022100106/events.jsonl",
         match_id="2022100106",
         sequence_id=0,
-        pytest=True,
+        test_mode=True,
     )
 
 
@@ -74,7 +74,7 @@ def test_PVS_full_pipeline():
 #         state_def="EDMS",
 #         input_path=os.getcwd() + "/test/data/dss/preprocess_data/",
 #         output_path=os.getcwd() + "/test/data/dss/preprocess_data/split/",
-#     ).split_train_test(pytest=True)
+#     ).split_train_test(test_mode=True)
 
 
 # def test_EDMS_preprocess_data():
