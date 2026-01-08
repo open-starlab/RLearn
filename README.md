@@ -4,7 +4,7 @@
 [![ArXiv](https://img.shields.io/badge/ArXiv-2502.02785-b31b1b?logo=arxiv)](https://arxiv.org/abs/2502.02785)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/PnH2MDDaCf)
 
-## Introduction
+# Introduction
 The OpenSTARLab RLearn package is the fundamental package for Reinforcement Learning modeling. It is designed to provide a simple and efficient way to train, inference, and simulate Reinforcement Learning. This package supports the data preprocessed by the OpenSTARLab PreProcessing package.
 
 This package is continuously evolving to support future OpenSTARLab projects. If you have any suggestions or encounter any bugs, please feel free to open an issue.
