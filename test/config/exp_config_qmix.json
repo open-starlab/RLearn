@@ -37,7 +37,7 @@
         }
     },
     "datamodule": {
-        "type": "jleague_rl_qmix",
+        "type": "rl_qmix",
         "state_action_tokenizer": {
             "type": "action_only",
             "action2id": {

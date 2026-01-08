@@ -33,7 +33,7 @@
         }
     },
     "datamodule": {
-        "type": "jleague_rl_attacker",
+        "type": "rl_attacker",
         "state_action_tokenizer": {
             "type": "action_only",
             "action2id": {

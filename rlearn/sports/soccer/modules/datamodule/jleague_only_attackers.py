@@ -1,6 +1,6 @@
 import logging
 from copy import deepcopy
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import torch
 
@@ -16,14 +16,14 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-@DataModule.register("jleague_rl_attacker")
-class JLeagueRLAttackerDataModule(DataModule):
+@DataModule.register("rl_attacker")
+class RLAttackerDataModule(DataModule):
     def __init__(
         self,
-        state_action_tokenizer: Dict[str, Any],
+        state_action_tokenizer: Dict,
         train_dataset: torch.utils.data.Dataset,
-        valid_dataset: torch.utils.data.Dataset | None = None,
-        test_dataset: torch.utils.data.Dataset | None = None,
+        valid_dataset: Optional[torch.utils.data.Dataset] = None,
+        test_dataset: Optional[torch.utils.data.Dataset] = None,
         batch_size: int = 128,
         num_workers: int = 8,
     ) -> None:
