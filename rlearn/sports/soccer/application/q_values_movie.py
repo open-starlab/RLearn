@@ -210,22 +210,12 @@ def _plot_q_chart(ax, values, labels, viz_style, title):
 
     ax.set_xticks(angles[:-1])
     ax.set_xticklabels(labels, color="grey", size=12)
-
-    # --- 修正・追加箇所 ---
-    # グリッド線を表示
     ax.grid(True, color="gray", linestyle=":", linewidth=0.5)
-
-    # Y軸（放射軸）の目盛りを明示的に設定
-    # 例: -1.0から1.0まで0.5刻みで表示
     ticks = [-1.0, -0.5, 0.0, 0.5, 1.0]
     ax.set_yticks(ticks)
     ax.set_yticklabels([str(t) for t in ticks], fontsize=10)
-
-    # 軸の範囲設定
     ax.set_ylim(-1.1, 1.1)
-    # --------------------
-
-    ax.set_title(title, fontsize=VIZ_SETTINGS["font_size_title"], pad=20)  # タイトルが被らないようpad調整推奨
+    ax.set_title(title, fontsize=VIZ_SETTINGS["font_size_title"], pad=20)
 
     if viz_style == "radar":
         ax.plot(angles, values_list, linewidth=2, linestyle="solid", alpha=VIZ_SETTINGS["radar_line_alpha"])
@@ -340,7 +330,7 @@ def create_movie(
     output_dir: str = None,
     test_mode: bool = False,
     viz_style: str = "radar",
-    scale_coords: bool = True,
+    scale_coords: bool = False,
     state_def: str = "PVS",
 ):
     """
