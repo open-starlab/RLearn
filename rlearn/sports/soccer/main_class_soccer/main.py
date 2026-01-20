@@ -79,7 +79,7 @@ class rlearn_model_soccer:
                 num_proc=self.num_process,
             )
         else:
-            game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if re.match(r"\d{10}", p.name)]
+            game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if p.is_dir() and p.name.isdigit()]
             train_game_ids, test_val_game_ids = train_test_split(game_ids, test_size=0.5, random_state=self.seed)
             test_game_ids, val_game_ids = train_test_split(test_val_game_ids, test_size=0.1, random_state=self.seed)
 
@@ -700,25 +700,43 @@ class rlearn_model_soccer:
 
 
 if __name__ == "__main__":
+    pass
     # rlearn_model_soccer(
     #     state_def="PVS",
-    #     input_path=os.getcwd() + "/test/data/datastadium/",
-    #     output_path=os.getcwd() + "/test/data/datastadium/split/",
+    #     input_path=os.getcwd() + "/test/data/fifawc/preprocess_data/",
+    #     output_path=os.getcwd() + "/test/data/fifawc/preprocess_data/split/",
     # ).run_rlearn(run_split_train_test=True)
 
     # rlearn_model_soccer(
     #     state_def="PVS",
-    #     config=os.getcwd() + "/test/config/preprocessing_dssports2020.json",
-    #     input_path=os.getcwd() + "/test/data/datastadium/split/mini",
-    #     output_path=os.getcwd() + "/test/data/datastadium_simple_obs_action_seq/split/mini",
+    #     config=os.getcwd() + "/test/config/preprocessing_fifawc.json",
+    #     input_path=os.getcwd() + "/test/data/fifawc/preprocess_data/split/train",
+    #     output_path=os.getcwd() + "/test/data/fifawc_simple_obs_action_seq/split/train",
     #     num_process=5,
     # ).run_rlearn(run_preprocess_observation=True)
 
     # rlearn_model_soccer(
     #     state_def="PVS",
-    #     config=os.getcwd() + "/test/config/exp_config.json",
+    #     config=os.getcwd() + "/test/config/preprocessing_fifawc.json",
+    #     input_path=os.getcwd() + "/test/data/fifawc/preprocess_data/split/validation",
+    #     output_path=os.getcwd() + "/test/data/fifawc_simple_obs_action_seq/split/validation",
+    #     num_process=5,
+    # ).run_rlearn(run_preprocess_observation=True)
+
+    # rlearn_model_soccer(
+    #     state_def="PVS",
+    #     config=os.getcwd() + "/test/config/preprocessing_fifawc.json",
+    #     input_path=os.getcwd() + "/test/data/fifawc/preprocess_data/split/test",
+    #     output_path=os.getcwd() + "/test/data/fifawc_simple_obs_action_seq/split/test",
+    #     num_process=5,
+    # ).run_rlearn(run_preprocess_observation=True)
+
+    # rlearn_model_soccer(
+    #     state_def="PVS",
+    #     config=os.getcwd() + "/test/config/exp_config_fifawc.json",
     # ).run_rlearn(
     #     run_train_and_test=True,
+    #     exp_config_path=os.getcwd() + "/test/config/exp_config_fifawc.json",
     #     exp_name="sarsa_attacker",
     #     run_name="test",
     #     accelerator="gpu",
@@ -729,15 +747,15 @@ if __name__ == "__main__":
     #     max_sequences_per_game_csv=5,
     # )
 
-    rlearn_model_soccer(
-        state_def="PVS",
-    ).run_rlearn(
-        run_visualize_data=True,
-        model_name="exp_config",
-        exp_config_path=os.getcwd() + "/test/config/exp_config.json",
-        checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=2-step=3-v19.ckpt",
-        tracking_file_path=os.getcwd() + "/test/data/dss/preprocess_data/2022100106/events.jsonl",
-        match_id="1",
-        sequence_id=4,
-        viz_style="radar",
-    )
+    # rlearn_model_soccer(
+    #     state_def="PVS",
+    # ).run_rlearn(
+    #     run_visualize_data=True,
+    #     model_name="exp_config_fifawc",
+    #     exp_config_path=os.getcwd() + "/test/config/exp_config_fifawc.json",
+    #     checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=9-step=10.ckpt",
+    #     tracking_file_path=os.getcwd() + "/test/data/fifawc/preprocess_data/3812/events.jsonl",
+    #     match_id="3812",
+    #     sequence_id=0,
+    #     viz_style="bar",
+    # )
