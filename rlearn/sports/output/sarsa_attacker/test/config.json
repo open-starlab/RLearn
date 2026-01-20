@@ -1,8 +1,8 @@
 {
     "dataset": {
-        "train_filename": "test/data/fifawc_simple_obs_action_seq/split/train",
-        "valid_filename": "test/data/fifawc_simple_obs_action_seq/split/validation",
-        "test_filename": "test/data/fifawc_simple_obs_action_seq/split/test",
+        "train_filename": "test/data/dss_simple_obs_action_seq/split/train",
+        "valid_filename": "test/data/dss_simple_obs_action_seq/split/validation",
+        "test_filename": "test/data/dss_simple_obs_action_seq/split/test",
         "preprocess_config": {
             "state_action_tokenizer": {
                 "type": "action_only",
@@ -85,7 +85,7 @@
     },
     "class_weight_fn": {
         "type": "exponential",
-        "cache_path": "test/data/fifawc_simple_obs_action_seq/exponential_beta0.9.pt",
+        "cache_path": "test/data/dss_simple_obs_action_seq/exponential_beta0.9.pt",
         "beta": 0.9
     },
     "max_epochs": 3,

@@ -703,40 +703,24 @@ if __name__ == "__main__":
     pass
     # rlearn_model_soccer(
     #     state_def="PVS",
-    #     input_path=os.getcwd() + "/test/data/fifawc/preprocess_data/",
-    #     output_path=os.getcwd() + "/test/data/fifawc/preprocess_data/split/",
+    #     input_path=os.getcwd() + "/test/data/dss/preprocess_data/",
+    #     output_path=os.getcwd() + "/test/data/dss/preprocess_data/split/",
     # ).run_rlearn(run_split_train_test=True)
 
     # rlearn_model_soccer(
     #     state_def="PVS",
-    #     config=os.getcwd() + "/test/config/preprocessing_fifawc.json",
-    #     input_path=os.getcwd() + "/test/data/fifawc/preprocess_data/split/train",
-    #     output_path=os.getcwd() + "/test/data/fifawc_simple_obs_action_seq/split/train",
+    #     config=os.getcwd() + "/test/config/preprocessing_dssports2020.json",
+    #     input_path=os.getcwd() + "/test/data/dss/preprocess_data/split/mini",
+    #     output_path=os.getcwd() + "/test/data/dss_simple_obs_action_seq/split/mini",
     #     num_process=5,
     # ).run_rlearn(run_preprocess_observation=True)
 
     # rlearn_model_soccer(
     #     state_def="PVS",
-    #     config=os.getcwd() + "/test/config/preprocessing_fifawc.json",
-    #     input_path=os.getcwd() + "/test/data/fifawc/preprocess_data/split/validation",
-    #     output_path=os.getcwd() + "/test/data/fifawc_simple_obs_action_seq/split/validation",
-    #     num_process=5,
-    # ).run_rlearn(run_preprocess_observation=True)
-
-    # rlearn_model_soccer(
-    #     state_def="PVS",
-    #     config=os.getcwd() + "/test/config/preprocessing_fifawc.json",
-    #     input_path=os.getcwd() + "/test/data/fifawc/preprocess_data/split/test",
-    #     output_path=os.getcwd() + "/test/data/fifawc_simple_obs_action_seq/split/test",
-    #     num_process=5,
-    # ).run_rlearn(run_preprocess_observation=True)
-
-    # rlearn_model_soccer(
-    #     state_def="PVS",
-    #     config=os.getcwd() + "/test/config/exp_config_fifawc.json",
+    #     config=os.getcwd() + "/test/config/exp_config.json",
     # ).run_rlearn(
     #     run_train_and_test=True,
-    #     exp_config_path=os.getcwd() + "/test/config/exp_config_fifawc.json",
+    #     exp_config_path=os.getcwd() + "/test/config/exp_config.json",
     #     exp_name="sarsa_attacker",
     #     run_name="test",
     #     accelerator="gpu",
@@ -751,11 +735,11 @@ if __name__ == "__main__":
     #     state_def="PVS",
     # ).run_rlearn(
     #     run_visualize_data=True,
-    #     model_name="exp_config_fifawc",
-    #     exp_config_path=os.getcwd() + "/test/config/exp_config_fifawc.json",
+    #     model_name="exp_config",
+    #     exp_config_path=os.getcwd() + "/test/config/exp_config.json",
     #     checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=9-step=10.ckpt",
-    #     tracking_file_path=os.getcwd() + "/test/data/fifawc/preprocess_data/3812/events.jsonl",
-    #     match_id="3812",
+    #     tracking_file_path=os.getcwd() + "/test/data/dss/preprocess_data/2022100106/events.jsonl",
+    #     match_id="2022100106",
     #     sequence_id=0,
     #     viz_style="bar",
     # )
