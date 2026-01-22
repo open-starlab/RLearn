@@ -11,6 +11,7 @@ This script provides functionalities to:
 
 import ast
 import os
+import glob
 
 import cv2
 import matplotlib.pyplot as plt
@@ -300,7 +301,7 @@ def plot_q_values(
 # --- 4. Movie Creation ---
 
 
-def movie_from_images(image_paths: list, output_file: str, fps: int = 5):
+def movie_from_images(image_paths: list, output_file: str, fps: int = 5, keep_frames: bool = True):
     """Creates a video from a list of image files."""
     if not image_paths:
         print("No images found to create a movie.")
@@ -318,8 +319,9 @@ def movie_from_images(image_paths: list, output_file: str, fps: int = 5):
     print(f"Movie saved to {output_file}")
 
     # Clean up images
-    for image_path in image_paths:
-        os.remove(image_path)
+    if not keep_frames:
+        for image_path in image_paths:
+            os.remove(image_path)
 
 
 def create_movie(
@@ -332,6 +334,7 @@ def create_movie(
     viz_style: str = "radar",
     scale_coords: bool = False,
     state_def: str = "PVS",
+    keep_frames: bool = True,
 ):
     """
     Main function to generate and save a movie visualizing Q-values for a specific sequence.
@@ -402,9 +405,9 @@ def create_movie(
             frame_count += 1
 
         # Create movie from frames
-        # image_paths = sorted(glob.glob(os.path.join(frames_dir, "*.png")))
-        # movie_path = os.path.join(movies_dir, f"{match_id}_{sequence_id}_{name}_{viz_style}.mp4")
-        # movie_from_images(image_paths, movie_path, fps=5)
+        image_paths = sorted(glob.glob(os.path.join(frames_dir, "*.png")))
+        movie_path = os.path.join(movies_dir, f"{match_id}_{sequence_id}_{name}_{viz_style}.mp4")
+        movie_from_images(image_paths, movie_path, fps=5, keep_frames=keep_frames)
 
 
 if __name__ == "__main__":

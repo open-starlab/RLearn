@@ -454,6 +454,8 @@ class rlearn_model_soccer:
         sequence_id,
         test_mode=False,
         viz_style="radar",
+        movie_output_dir=None,
+        keep_frames=True,
     ):
         exp_config = load_json(exp_config_path)
         test_file_path = Path(os.getcwd() + "/" + exp_config["dataset"]["test_filename"])
@@ -556,8 +558,10 @@ class rlearn_model_soccer:
             match_id=match_id,
             sequence_id=sequence_id,
             tracking_file_path=tracking_file_path,
+            output_dir=movie_output_dir,
             test_mode=test_mode,
             viz_style=viz_style,
+            keep_frames=keep_frames,
         )
 
     def run_rlearn(
@@ -583,6 +587,8 @@ class rlearn_model_soccer:
         match_id=None,
         sequence_id=None,
         viz_style="radar",
+        movie_output_dir=None,
+        keep_frames=True,
     ):
         # Store original paths
         original_input_path = self.input_path
@@ -691,6 +697,8 @@ class rlearn_model_soccer:
                     sequence_id=sequence_id,
                     test_mode=test_mode,
                     viz_style=viz_style,
+                    movie_output_dir=movie_output_dir,
+                    keep_frames=keep_frames,
                 )
 
         # Restore original paths
