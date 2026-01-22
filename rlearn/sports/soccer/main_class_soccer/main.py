@@ -79,7 +79,7 @@ class rlearn_model_soccer:
                 num_proc=self.num_process,
             )
         else:
-            game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if re.match(r"\d{10}", p.name)]
+            game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if p.is_dir() and p.name.isdigit()]
             train_game_ids, test_val_game_ids = train_test_split(game_ids, test_size=0.5, random_state=self.seed)
             test_game_ids, val_game_ids = train_test_split(test_val_game_ids, test_size=0.1, random_state=self.seed)
 
@@ -454,6 +454,8 @@ class rlearn_model_soccer:
         sequence_id,
         test_mode=False,
         viz_style="radar",
+        movie_output_dir=None,
+        keep_frames=True,
     ):
         exp_config = load_json(exp_config_path)
         test_file_path = Path(os.getcwd() + "/" + exp_config["dataset"]["test_filename"])
@@ -556,8 +558,10 @@ class rlearn_model_soccer:
             match_id=match_id,
             sequence_id=sequence_id,
             tracking_file_path=tracking_file_path,
+            output_dir=movie_output_dir,
             test_mode=test_mode,
             viz_style=viz_style,
+            keep_frames=keep_frames,
         )
 
     def run_rlearn(
@@ -583,6 +587,8 @@ class rlearn_model_soccer:
         match_id=None,
         sequence_id=None,
         viz_style="radar",
+        movie_output_dir=None,
+        keep_frames=True,
     ):
         # Store original paths
         original_input_path = self.input_path
@@ -691,6 +697,8 @@ class rlearn_model_soccer:
                     sequence_id=sequence_id,
                     test_mode=test_mode,
                     viz_style=viz_style,
+                    movie_output_dir=movie_output_dir,
+                    keep_frames=keep_frames,
                 )
 
         # Restore original paths
@@ -700,17 +708,18 @@ class rlearn_model_soccer:
 
 
 if __name__ == "__main__":
+    pass
     # rlearn_model_soccer(
     #     state_def="PVS",
-    #     input_path=os.getcwd() + "/test/data/datastadium/",
-    #     output_path=os.getcwd() + "/test/data/datastadium/split/",
+    #     input_path=os.getcwd() + "/test/data/dss/preprocess_data/",
+    #     output_path=os.getcwd() + "/test/data/dss/preprocess_data/split/",
     # ).run_rlearn(run_split_train_test=True)
 
     # rlearn_model_soccer(
     #     state_def="PVS",
     #     config=os.getcwd() + "/test/config/preprocessing_dssports2020.json",
-    #     input_path=os.getcwd() + "/test/data/datastadium/split/mini",
-    #     output_path=os.getcwd() + "/test/data/datastadium_simple_obs_action_seq/split/mini",
+    #     input_path=os.getcwd() + "/test/data/dss/preprocess_data/split/mini",
+    #     output_path=os.getcwd() + "/test/data/dss_simple_obs_action_seq/split/mini",
     #     num_process=5,
     # ).run_rlearn(run_preprocess_observation=True)
 
@@ -719,6 +728,7 @@ if __name__ == "__main__":
     #     config=os.getcwd() + "/test/config/exp_config.json",
     # ).run_rlearn(
     #     run_train_and_test=True,
+    #     exp_config_path=os.getcwd() + "/test/config/exp_config.json",
     #     exp_name="sarsa_attacker",
     #     run_name="test",
     #     accelerator="gpu",
@@ -729,15 +739,15 @@ if __name__ == "__main__":
     #     max_sequences_per_game_csv=5,
     # )
 
-    rlearn_model_soccer(
-        state_def="PVS",
-    ).run_rlearn(
-        run_visualize_data=True,
-        model_name="exp_config",
-        exp_config_path=os.getcwd() + "/test/config/exp_config.json",
-        checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=2-step=3-v19.ckpt",
-        tracking_file_path=os.getcwd() + "/test/data/dss/preprocess_data/2022100106/events.jsonl",
-        match_id="1",
-        sequence_id=4,
-        viz_style="radar",
-    )
+    # rlearn_model_soccer(
+    #     state_def="PVS",
+    # ).run_rlearn(
+    #     run_visualize_data=True,
+    #     model_name="exp_config",
+    #     exp_config_path=os.getcwd() + "/test/config/exp_config.json",
+    #     checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=9-step=10.ckpt",
+    #     tracking_file_path=os.getcwd() + "/test/data/dss/preprocess_data/2022100106/events.jsonl",
+    #     match_id="2022100106",
+    #     sequence_id=0,
+    #     viz_style="bar",
+    # )

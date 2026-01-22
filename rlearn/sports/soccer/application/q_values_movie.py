@@ -11,6 +11,7 @@ This script provides functionalities to:
 
 import ast
 import os
+import glob
 
 import cv2
 import matplotlib.pyplot as plt
@@ -210,22 +211,12 @@ def _plot_q_chart(ax, values, labels, viz_style, title):
 
     ax.set_xticks(angles[:-1])
     ax.set_xticklabels(labels, color="grey", size=12)
-
-    # --- 修正・追加箇所 ---
-    # グリッド線を表示
     ax.grid(True, color="gray", linestyle=":", linewidth=0.5)
-
-    # Y軸（放射軸）の目盛りを明示的に設定
-    # 例: -1.0から1.0まで0.5刻みで表示
     ticks = [-1.0, -0.5, 0.0, 0.5, 1.0]
     ax.set_yticks(ticks)
     ax.set_yticklabels([str(t) for t in ticks], fontsize=10)
-
-    # 軸の範囲設定
     ax.set_ylim(-1.1, 1.1)
-    # --------------------
-
-    ax.set_title(title, fontsize=VIZ_SETTINGS["font_size_title"], pad=20)  # タイトルが被らないようpad調整推奨
+    ax.set_title(title, fontsize=VIZ_SETTINGS["font_size_title"], pad=20)
 
     if viz_style == "radar":
         ax.plot(angles, values_list, linewidth=2, linestyle="solid", alpha=VIZ_SETTINGS["radar_line_alpha"])
@@ -310,7 +301,7 @@ def plot_q_values(
 # --- 4. Movie Creation ---
 
 
-def movie_from_images(image_paths: list, output_file: str, fps: int = 5):
+def movie_from_images(image_paths: list, output_file: str, fps: int = 5, keep_frames: bool = True):
     """Creates a video from a list of image files."""
     if not image_paths:
         print("No images found to create a movie.")
@@ -328,8 +319,9 @@ def movie_from_images(image_paths: list, output_file: str, fps: int = 5):
     print(f"Movie saved to {output_file}")
 
     # Clean up images
-    for image_path in image_paths:
-        os.remove(image_path)
+    if not keep_frames:
+        for image_path in image_paths:
+            os.remove(image_path)
 
 
 def create_movie(
@@ -340,8 +332,9 @@ def create_movie(
     output_dir: str = None,
     test_mode: bool = False,
     viz_style: str = "radar",
-    scale_coords: bool = True,
+    scale_coords: bool = False,
     state_def: str = "PVS",
+    keep_frames: bool = True,
 ):
     """
     Main function to generate and save a movie visualizing Q-values for a specific sequence.
@@ -412,9 +405,9 @@ def create_movie(
             frame_count += 1
 
         # Create movie from frames
-        # image_paths = sorted(glob.glob(os.path.join(frames_dir, "*.png")))
-        # movie_path = os.path.join(movies_dir, f"{match_id}_{sequence_id}_{name}_{viz_style}.mp4")
-        # movie_from_images(image_paths, movie_path, fps=5)
+        image_paths = sorted(glob.glob(os.path.join(frames_dir, "*.png")))
+        movie_path = os.path.join(movies_dir, f"{match_id}_{sequence_id}_{name}_{viz_style}.mp4")
+        movie_from_images(image_paths, movie_path, fps=5, keep_frames=keep_frames)
 
 
 if __name__ == "__main__":
