@@ -198,9 +198,6 @@ class rlearn_model_soccer:
                         else:
                             raise ValueError(f"Unsupported state definition: {self.state_def}")
                     except (IndexError, Exception):
-                        logger.warning(
-                            f"target_player_id: {target_player_id} not found in game_id: {events.game_id} half: {events.half} seq_id: {events.sequence_id}"
-                        )
                         continue
 
                     if self.state_def == "PVS":
