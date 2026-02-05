@@ -423,7 +423,21 @@ class rlearn_model_soccer:
             "offball_action_idx": exp_config["offball_action_idx"],
             "onball_action_idx": exp_config["onball_action_idx"],
         }
-        params_["class_weights"] = params_["class_weights"].tolist()
+        params_["class_weights"] = params_["class_weights"].tolist() if params_["class_weights"] is not None else None
+        params_.update(
+            {
+                key: exp_config["model"][key]
+                for key in (
+                    "n_agents",
+                    "state_dim",
+                    "action_dim",
+                    "mixer_network",
+                    "tau",
+                    "target_update_interval",
+                )
+                if key in exp_config["model"]
+            }
+        )
 
         model = QModelBase.from_params(params_=params_)
 
@@ -477,18 +491,31 @@ class rlearn_model_soccer:
         observation_dim = exp_config["model"]["observation_dim"]
         sequence_encoder = exp_config["model"]["sequence_encoder"]
         optimizer = exp_config["model"]["optimizer"]
-        model = QModelBase.from_params(
-            params_={
-                "type": type_,
-                "observation_dim": observation_dim,
-                "sequence_encoder": sequence_encoder,
-                "vocab_size": datamodule.state_action_tokenizer.num_tokens,
-                "optimizer": optimizer,
-                "gamma": exp_config["model"]["gamma"],
-                "lambda_": exp_config["model"]["lambda_"],
-                "lambda2_": exp_config["model"]["lambda2_"],
+        params_ = {
+            "type": type_,
+            "observation_dim": observation_dim,
+            "sequence_encoder": sequence_encoder,
+            "vocab_size": datamodule.state_action_tokenizer.num_tokens,
+            "optimizer": optimizer,
+            "gamma": exp_config["model"]["gamma"],
+            "lambda_": exp_config["model"]["lambda_"],
+            "lambda2_": exp_config["model"]["lambda2_"],
+        }
+        params_.update(
+            {
+                key: exp_config["model"][key]
+                for key in (
+                    "n_agents",
+                    "state_dim",
+                    "action_dim",
+                    "mixer_network",
+                    "tau",
+                    "target_update_interval",
+                )
+                if key in exp_config["model"]
             }
         )
+        model = QModelBase.from_params(params_=params_)
         checkpoint = (
             torch.load(checkpoint_path, weights_only=False)
             if not test_mode
@@ -670,7 +697,7 @@ class rlearn_model_soccer:
                 strategy=strategy,
                 save_q_values_csv=save_q_values_csv,
                 max_games_csv=max_games_csv,
-                max_sequences_per_game_csv=max_sequences_per_game_csv,
+                max_sequences_per_game=max_sequences_per_game_csv,
                 test_mode=test_mode,
             )
 
