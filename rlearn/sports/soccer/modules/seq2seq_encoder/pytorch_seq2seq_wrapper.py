@@ -137,15 +137,15 @@ class PytorchSeq2SeqWrapper_MLP(Seq2SeqEncoder):
             self._num_directions = 1
 
     def get_input_dim(self) -> int:
-        return cast(int, self._module.in_features)  # 修正
+        return cast(int, self._module.in_features)
 
     def get_output_dim(self) -> int:
-        return cast(int, self._module.out_features) * self._num_directions  # 修正
+        return cast(int, self._module.out_features) * self._num_directions
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         output = self._module(inputs)
         return cast(torch.Tensor, output)
-    
+
 
 @Seq2SeqEncoder.register("mlp")
 class MlpSeq2SeqEncoder(PytorchSeq2SeqWrapper_MLP):
@@ -153,11 +153,6 @@ class MlpSeq2SeqEncoder(PytorchSeq2SeqWrapper_MLP):
     Registered as a `Seq2SeqEncoder` with name "mlp".
     """
 
-    def __init__(
-            self,
-            input_size: int,
-            hidden_size: int,
-            bias: bool = True
-        ):
+    def __init__(self, input_size: int, hidden_size: int, bias: bool = True):
         module = nn.Linear(in_features=input_size, out_features=hidden_size, bias=bias)
         super().__init__(module=module)

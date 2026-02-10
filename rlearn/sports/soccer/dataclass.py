@@ -1007,10 +1007,10 @@ class AgentCentricObservation(Observation_EDMS):
             return player_index[:required_length]
 
         if len(player_index) == 0:
-            # 選手が一人もいない場合はゼロで埋める
+            # padding with zeros if no players are available
             return np.zeros(required_length, dtype=int)
 
-        # 循環パディング
+        # circular padding
         padded_indices = []
         for i in range(required_length):
             padded_indices.append(player_index[i % len(player_index)])
