@@ -1,114 +1,110 @@
 {
     "dataset": {
-        "train_filename": "test/data/dss_simple_obs_action_seq/split/mini",
-        "valid_filename": "test/data/dss_simple_obs_action_seq/split/mini",
-        "test_filename": "test/data/dss_simple_obs_action_seq/split/mini",
-        "preprocess_config": {
-            "state_action_tokenizer": {
-                "type": "action_only",
-                "action2id": {
-                    "idle": 0,
-                    "right": 1,
-                    "up_right": 2,
-                    "up": 3,
-                    "up_left": 4,
-                    "left": 5,
-                    "down_left": 6,
-                    "down": 7,
-                    "down_right": 8,
-                    "shot": 9,
-                    "dribble": 10,
-                    "through_pass": 11,
-                    "pass": 12,
-                    "cross": 13,
-                    "defensive_action": 14,
-                    "action_15": 15,
-                    "action_16": 16,
-                    "action_17": 17,
-                    "action_18": 18
-                },
-                "origin_pos": "center",
-                "special_tokens": [
-                    "[PAD]"
-                ]
-            },
-            "num_workers": 8,
-            "preprocess_batch_size": 32
-        }
+      "train_filename": "test/data/dss_simple_obs_action_seq/split/mini",
+      "valid_filename": "test/data/dss_simple_obs_action_seq/split/mini",
+      "test_filename": "test/data/dss_simple_obs_action_seq/split/mini",
+      "preprocess_config": {
+        "state_action_tokenizer": {
+          "type": "action_only",
+          "action2id": {
+            "idle": 0,
+            "right": 1,
+            "up_right": 2,
+            "up": 3,
+            "up_left": 4,
+            "left": 5,
+            "down_left": 6,
+            "down": 7,
+            "down_right": 8,
+            "shot": 9,
+            "dribble": 10,
+            "through_pass": 11,
+            "pass": 12,
+            "cross": 13,
+            "defensive_action": 14,
+            "action_15": 15,
+            "action_16": 16,
+            "action_17": 17,
+            "action_18": 18
+          },
+          "origin_pos": "center",
+          "special_tokens": ["[PAD]"]
+        },
+        "num_workers": 8,
+        "preprocess_batch_size": 32
+      }
     },
     "datamodule": {
-        "type": "rl_qmix",
-        "state_action_tokenizer": {
-            "type": "action_only",
-            "action2id": {
-                "idle": 0,
-                "right": 1,
-                "up_right": 2,
-                "up": 3,
-                "up_left": 4,
-                "left": 5,
-                "down_left": 6,
-                "down": 7,
-                "down_right": 8,
-                "shot": 9,
-                "dribble": 10,
-                "through_pass": 11,
-                "pass": 12,
-                "cross": 13,
-                "defensive_action": 14,
-                "action_15": 15,
-                "action_16": 16,
-                "action_17": 17,
-                "action_18": 18
-            },
-            "origin_pos": "center",
-            "special_tokens": [
-                "[PAD]"
-            ]
+      "type": "rl_qmix",
+      "state_action_tokenizer": {
+        "type": "action_only",
+        "action2id": {
+          "idle": 0,
+          "right": 1,
+          "up_right": 2,
+          "up": 3,
+          "up_left": 4,
+          "left": 5,
+          "down_left": 6,
+          "down": 7,
+          "down_right": 8,
+          "shot": 9,
+          "dribble": 10,
+          "through_pass": 11,
+          "pass": 12,
+          "cross": 13,
+          "defensive_action": 14,
+          "action_15": 15,
+          "action_16": 16,
+          "action_17": 17,
+          "action_18": 18
         },
-        "num_workers": 1,
-        "batch_size": 256
+        "origin_pos": "center",
+        "special_tokens": ["[PAD]"]
+      },
+      "num_workers": 1,
+      "batch_size": 256
     },
     "model": {
-        "type": "qmix",
-        "n_agents": 11,
-        "observation_dim": 128,
-        "state_dim": 256,
-        "action_dim": 19,
-        "sequence_encoder": {
-            "type": "gru",
-            "input_size": 128,
-            "hidden_size": 128,
-            "num_layers": 1,
-            "bias": true,
-            "dropout": 0.0,
-            "bidirectional": false
-        },
-        "mixer_network": {
-            "hidden_dim": 256,
-            "hyper_hidden": 64,
-            "mixing_hidden": 32
-        },
-        "vocab_size": 20,
-        "optimizer": {
-            "type": "torch::Adam",
-            "lr": 0.0005,
-            "weight_decay": 1e-5
-        },
-        "gamma": 0.99,
-        "tau": 0.01,
-        "epsilon_start": 1.0,
-        "epsilon_end": 0.05,
-        "epsilon_decay": 0.995,
-        "buffer_size": 10000,
-        "target_update_interval": 200
+      "type": "qmix",
+      "n_agents": 11,
+      "observation_dim": 128,
+      "state_dim": 256,
+      "action_dim": 20,
+      "sequence_encoder": {
+        "type": "gru",
+        "input_size": 128,
+        "hidden_size": 128,
+        "num_layers": 1,
+        "bias": true,
+        "dropout": 0.0,
+        "bidirectional": false
+      },
+      "mixer_network": {
+        "hyper_hidden": 64,
+        "mixing_hidden": 32
+      },
+      "vocab_size": 20,
+      "optimizer": {
+        "type": "torch::Adam",
+        "lr": 0.0005,
+        "weight_decay": 1e-5
+      },
+      "gamma": 0.99,
+      "tau": 0.01,
+      "target_update_interval": 200,
+      "lambda_": 0.0,
+      "lambda2_": 0.0
     },
+    "offball_action_idx": [],
+    "onball_action_idx": [],
     "class_weight_fn": {
-        "type": "exponential",
-        "cache_path": "test/data/datastadium_simple_obs_action_seq/exponential_beta0.9.pt",
-        "beta": 0.9
+      "type": "exponential",
+      "cache_path": "test/data/datastadium_simple_obs_action_seq/exponential_beta0.9.pt",
+      "beta": 0.9
     },
     "max_epochs": 3,
     "val_check_interval": 1.0,
     "accumulate_grad_batches": 1
-}
+  }
+  
