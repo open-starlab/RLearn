@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, Optional, Tuple
 
 import torch
@@ -314,7 +315,7 @@ class QMixModel(QModelBase):
             return F.mse_loss(pred, target, reduction="none")
         raise ValueError(f"Unsupported td_loss={self.td_loss}")
 
-    def compute_loss(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def compute_loss(self, batch: Dict[str, torch.Tensor], batch_idx: Optional[int] = None) -> torch.Tensor:
         obs, state, action, reward, done = self._parse_batch(batch)
         device = obs.device
         bsz, t_steps, n_agents, _ = obs.shape
@@ -413,6 +414,8 @@ class QMixModel(QModelBase):
 
         cql = torch.zeros((), device=device)
         if self.cql_alpha > 0.0:
+            # NOTE: CQL is applied to per-agent Q_i (not Q_tot) for computational efficiency.
+            # This is an experimental approximation without standard CQL guarantees.
             lse = torch.logsumexp(q, dim=-1)  # (B, T-1, N)
             cql_gap = (lse - q_taken).clamp_min(0.0) * action_valid
             cql_gap = cql_gap * mask_tm1.unsqueeze(-1)
@@ -421,11 +424,12 @@ class QMixModel(QModelBase):
 
         l1 = torch.zeros((), device=device)
         if self.lambda_l1 > 0.0:
-            l1 = self.lambda_l1 * sum(p.abs().sum() for p in self.parameters())
+            l1 = self.lambda_l1 * sum(p.abs().sum() for p in self.parameters() if p.requires_grad)
 
         loss = td + cql + (self.lambda_as * as_loss) + l1
 
         if not torch.isfinite(loss):
+            logging.warning(f"Non-finite loss at epoch {self.current_epoch}, batch {batch_idx}")
             return torch.zeros((), device=device, requires_grad=True)
 
         self.log("td_loss", td, prog_bar=False, on_step=True, on_epoch=True, sync_dist=True)
@@ -437,26 +441,29 @@ class QMixModel(QModelBase):
         return loss
 
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        loss = self.compute_loss(batch)
+        loss = self.compute_loss(batch, batch_idx=batch_idx)
         self.log("train_loss", loss, prog_bar=False, on_step=True, on_epoch=True, sync_dist=True)
         return loss
 
     def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        loss = self.compute_loss(batch)
+        loss = self.compute_loss(batch, batch_idx=batch_idx)
         self.log("val_loss", loss, prog_bar=False, on_step=False, on_epoch=True, sync_dist=True)
         return loss
 
     def test_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        loss = self.compute_loss(batch)
+        loss = self.compute_loss(batch, batch_idx=batch_idx)
         self.log("test_loss", loss, prog_bar=False, on_step=False, on_epoch=True, sync_dist=True)
         return loss
 
     def on_train_batch_end(self, outputs: torch.Tensor, batch: Any, batch_idx: int) -> None:
         self._target_update_counter += 1
         if 0.0 < self.tau < 1.0:
+            # Soft update: every batch (target_update_interval intentionally ignored).
             self._soft_update_targets(self.tau)
-        elif self._target_update_counter % self.target_update_interval == 0:
-            self._hard_update_targets()
+        elif self.tau == 1.0:
+            # Hard update: every target_update_interval batches.
+            if self._target_update_counter % self.target_update_interval == 0:
+                self._hard_update_targets()
 
     def configure_optimizers(self):
         if self._optimizer_config is None:
