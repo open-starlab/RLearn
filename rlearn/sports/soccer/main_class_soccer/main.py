@@ -2,6 +2,7 @@ import logging
 import re
 from pathlib import Path
 import os
+import shutil
 from typing import Any, Dict
 from copy import deepcopy
 import time
@@ -12,7 +13,6 @@ from sklearn.model_selection import train_test_split
 import pytorch_lightning as pl
 import torch
 import warnings
-from lightning_lite.utilities.seed import seed_everything
 
 
 from ..dataclass import (
@@ -295,9 +295,13 @@ class rlearn_model_soccer:
         save_q_values_csv=False,
         max_games_csv=1,
         max_sequences_per_game_csv=5,
+        save_intermediate_checkpoints=False,
+        checkpoint_every_n_epochs=1,
+        checkpoint_save_top_k=-1,
+        resume_checkpoint_path=None,
         test_mode=False,
     ):
-        seed_everything(self.seed)
+        pl.seed_everything(self.seed)
         exp_config = load_json(self.config)
         config_copy = deepcopy(exp_config)
 
@@ -367,33 +371,62 @@ class rlearn_model_soccer:
         else:
             class_weights = None
 
-        tensorboard_logger = pl.loggers.TensorBoardLogger(
-            save_dir=str(PROJECT_DIR / "tensorboard_logs"),
-            name=run_name,
-        )
+        training_loggers = []
+        try:
+            tensorboard_logger = pl.loggers.TensorBoardLogger(
+                save_dir=str(PROJECT_DIR / "tensorboard_logs"),
+                name=run_name,
+            )
+            training_loggers.append(tensorboard_logger)
+        except ModuleNotFoundError as exc:
+            logger.warning(f"TensorBoard logger is disabled because dependency is missing: {exc}")
 
-        mlflow_logger = pl.loggers.MLFlowLogger(
-            experiment_name=exp_name,
-            run_name=run_name,
-            save_dir=str(PROJECT_DIR / "mlruns"),
-        )
+        try:
+            mlflow_logger = pl.loggers.MLFlowLogger(
+                experiment_name=exp_name,
+                run_name=run_name,
+                save_dir=str(PROJECT_DIR / "mlruns"),
+            )
+            training_loggers.append(mlflow_logger)
+        except ModuleNotFoundError as exc:
+            logger.warning(f"MLflow logger is disabled because dependency is missing: {exc}")
 
-        checkpoint_callback = pl.callbacks.ModelCheckpoint(
-            dirpath=output_dir / "checkpoints",
-            monitor="val_loss",
-            mode="min",
-            save_top_k=1,
-        )
+        checkpoint_filename = "{epoch:02d}-{step}-val_loss={val_loss:.4f}"
+        if save_intermediate_checkpoints:
+            checkpoint_callback = pl.callbacks.ModelCheckpoint(
+                dirpath=output_dir / "checkpoints",
+                monitor="val_loss",
+                mode="min",
+                every_n_epochs=checkpoint_every_n_epochs,
+                save_top_k=checkpoint_save_top_k,
+                filename=checkpoint_filename,
+                auto_insert_metric_name=False,
+                save_last=True,
+                save_on_exception=True,
+            )
+        else:
+            checkpoint_callback = pl.callbacks.ModelCheckpoint(
+                dirpath=output_dir / "checkpoints",
+                monitor="val_loss",
+                mode="min",
+                save_top_k=1,
+                filename=checkpoint_filename,
+                auto_insert_metric_name=False,
+                save_last=True,
+                save_on_exception=True,
+            )
+        callbacks = [checkpoint_callback]
         early_stopping_callback = pl.callbacks.EarlyStopping(
             monitor="val_loss",
             patience=5,
             mode="min",
             min_delta=0.01,
         )
+        callbacks.append(early_stopping_callback)
         trainer = pl.Trainer(
             max_epochs=exp_config["max_epochs"],
-            logger=[tensorboard_logger, mlflow_logger],
-            callbacks=[checkpoint_callback, early_stopping_callback],
+            logger=training_loggers if training_loggers else False,
+            callbacks=callbacks,
             accelerator=accelerator,
             devices=devices,
             strategy=strategy,
@@ -438,7 +471,21 @@ class rlearn_model_soccer:
 
         model = QModelBase.from_params(params_=params_)
 
-        trainer.fit(model=model, datamodule=datamodule)
+        fit_ckpt_path = None
+        if resume_checkpoint_path:
+            fit_ckpt_path = str(Path(resume_checkpoint_path).expanduser().resolve())
+            if not Path(fit_ckpt_path).exists():
+                raise FileNotFoundError(f"resume checkpoint not found: {fit_ckpt_path}")
+            logger.info(f"Resuming training from checkpoint: {fit_ckpt_path}")
+        trainer.fit(model=model, datamodule=datamodule, ckpt_path=fit_ckpt_path)
+        if checkpoint_callback.best_model_path:
+            best_ckpt_src = Path(checkpoint_callback.best_model_path)
+            best_ckpt_dst = output_dir / "checkpoints" / f"best-{best_ckpt_src.stem}.ckpt"
+            if best_ckpt_src.resolve() != best_ckpt_dst.resolve():
+                shutil.copy2(best_ckpt_src, best_ckpt_dst)
+            logger.info(f"Best checkpoint: {best_ckpt_src} (alias: {best_ckpt_dst})")
+        else:
+            logger.warning("Best checkpoint was not created. Check ModelCheckpoint settings.")
         trainer.test(model=model, dataloaders=datamodule.test_dataloader())
         save_formatted_json(config_copy, output_dir / "config.json")
 
@@ -604,6 +651,10 @@ class rlearn_model_soccer:
         save_q_values_csv=False,
         max_games_csv=1,
         max_sequences_per_game_csv=5,
+        save_intermediate_checkpoints=False,
+        checkpoint_every_n_epochs=1,
+        checkpoint_save_top_k=-1,
+        resume_checkpoint_path=None,
         model_name=None,
         exp_config_path=None,
         checkpoint_path=None,
@@ -694,7 +745,11 @@ class rlearn_model_soccer:
                 strategy=strategy,
                 save_q_values_csv=save_q_values_csv,
                 max_games_csv=max_games_csv,
-                max_sequences_per_game=max_sequences_per_game_csv,
+                max_sequences_per_game_csv=max_sequences_per_game_csv,
+                save_intermediate_checkpoints=save_intermediate_checkpoints,
+                checkpoint_every_n_epochs=checkpoint_every_n_epochs,
+                checkpoint_save_top_k=checkpoint_save_top_k,
+                resume_checkpoint_path=resume_checkpoint_path,
                 test_mode=test_mode,
             )
 
@@ -758,6 +813,8 @@ if __name__ == "__main__":
     #     accelerator="gpu",
     #     devices=1,
     #     strategy="ddp",
+    #     save_intermediate_checkpoints=True,
+    #     # resume_checkpoint_path="rlearn/sports/output/sarsa_attacker/test/checkpoints/00-1-val_loss=0.2089.ckpt", # for resuming training from a specific checkpoint
     #     save_q_values_csv=True,
     #     max_games_csv=1,
     #     max_sequences_per_game_csv=5,
