@@ -91,7 +91,7 @@ class AttackerDQNModel(QModelBase):
         q_sa = q_values.gather(2, action.unsqueeze(-1)).squeeze(-1)
 
         with torch.no_grad():
-            next_q_values = q_values[:, 1:].max(dim=2).values
+            next_q_values = self.forward(batch)[:, 1:].max(dim=2).values
             td_target = reward[:, :-1] + self.gamma * next_q_values
 
         td_error = td_target - q_sa[:, :-1]
@@ -148,7 +148,7 @@ class AttackerDQNModel(QModelBase):
         q_sa = q_values.gather(2, action.unsqueeze(-1)).squeeze(-1)
 
         with torch.no_grad():
-            next_q_values = q_values[:, 1:].max(dim=2).values
+            next_q_values = self.forward(batch)[:, 1:].max(dim=2).values
             td_target = reward[:, :-1] + self.gamma * next_q_values
 
         td_error = td_target - q_sa[:, :-1]
@@ -226,7 +226,7 @@ class AttackerDQNModel(QModelBase):
         q_sa = q_values.gather(2, action.unsqueeze(-1)).squeeze(-1)
 
         with torch.no_grad():
-            next_q_values = q_values[:, 1:].max(dim=2).values
+            next_q_values = self.forward(batch)[:, 1:].max(dim=2).values
             td_target = reward[:, :-1] + self.gamma * next_q_values
 
         td_error = td_target - q_sa[:, :-1]
