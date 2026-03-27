@@ -13,6 +13,7 @@ from sklearn.model_selection import train_test_split
 import pytorch_lightning as pl
 import torch
 import warnings
+from pytorch_lightning import seed_everything
 
 
 from ..dataclass import (
@@ -300,6 +301,7 @@ class rlearn_model_soccer:
         checkpoint_save_top_k=-1,
         resume_checkpoint_path=None,
         test_mode=False,
+        class_weight_only=False,
     ):
         pl.seed_everything(self.seed)
         exp_config = load_json(self.config)
@@ -320,28 +322,31 @@ class rlearn_model_soccer:
             accelerator = "cpu"
             strategy = "auto"
 
-        output_dir = OUTPUT_DIR / exp_name / run_name
-        output_dir.mkdir(exist_ok=True, parents=True)
-
         logger.info("loading dataset...")
         train_dataset = load_from_disk(Path(exp_config["dataset"]["train_filename"]).resolve())
-        valid_dataset = load_from_disk(Path(exp_config["dataset"]["valid_filename"]).resolve())
-        test_dataset = load_from_disk(Path(exp_config["dataset"]["test_filename"]).resolve())
+        valid_dataset = None
+        test_dataset = None
+        if not class_weight_only:
+            valid_dataset = load_from_disk(Path(exp_config["dataset"]["valid_filename"]).resolve())
+            test_dataset = load_from_disk(Path(exp_config["dataset"]["test_filename"]).resolve())
         logger.info("Preprocessing dataset...")
         start = time.time()
         train_dataset = DataModule.by_name(exp_config["datamodule"]["type"]).preprocess_data(
             train_dataset, self.state_def, **exp_config["dataset"]["preprocess_config"]
         )
-        valid_dataset = DataModule.by_name(exp_config["datamodule"]["type"]).preprocess_data(
-            valid_dataset, self.state_def, **exp_config["dataset"]["preprocess_config"]
-        )
-        test_dataset = DataModule.by_name(exp_config["datamodule"]["type"]).preprocess_data(
-            test_dataset, self.state_def, **exp_config["dataset"]["preprocess_config"]
-        )
+        if not class_weight_only:
+            valid_dataset = DataModule.by_name(exp_config["datamodule"]["type"]).preprocess_data(
+                valid_dataset, self.state_def, **exp_config["dataset"]["preprocess_config"]
+            )
+            test_dataset = DataModule.by_name(exp_config["datamodule"]["type"]).preprocess_data(
+                test_dataset, self.state_def, **exp_config["dataset"]["preprocess_config"]
+            )
         logger.info(f"Preprocessing dataset is done. {time.time() - start} sec")
         logger.info(f"Train dataset size: {len(train_dataset)}")
-        logger.info(f"Valid dataset size: {len(valid_dataset)}")
-        logger.info(f"Test dataset size: {len(test_dataset)}")
+        if valid_dataset is not None:
+            logger.info(f"Valid dataset size: {len(valid_dataset)}")
+        if test_dataset is not None:
+            logger.info(f"Test dataset size: {len(test_dataset)}")
 
         datamodule = DataModule.from_params(
             params_=exp_config["datamodule"],
@@ -357,6 +362,7 @@ class rlearn_model_soccer:
             class_weight_fn = ClassWeightBase.from_params(exp_config["class_weight_fn"])
             if class_weight_fn.class_weights is not None:
                 class_weights = class_weight_fn.class_weights
+                logger.info("Using provided class weights from config.")
             else:
                 logger.info("Calculating class weights...")
                 class_counts = torch.zeros(datamodule.state_action_tokenizer.num_tokens)
@@ -371,15 +377,25 @@ class rlearn_model_soccer:
         else:
             class_weights = None
 
-        training_loggers = []
-        try:
-            tensorboard_logger = pl.loggers.TensorBoardLogger(
-                save_dir=str(PROJECT_DIR / "tensorboard_logs"),
-                name=run_name,
-            )
-            training_loggers.append(tensorboard_logger)
-        except ModuleNotFoundError as exc:
-            logger.warning(f"TensorBoard logger is disabled because dependency is missing: {exc}")
+        if class_weight_only:
+            if class_weights is None:
+                raise ValueError("class_weight_only=True requires `class_weight_fn` in exp config.")
+            logger.info("class_weight_only=True: class weights prepared. Skipping training and testing.")
+            return
+
+        output_dir = OUTPUT_DIR / exp_name / run_name
+        output_dir.mkdir(exist_ok=True, parents=True)
+
+        tensorboard_logger = pl.loggers.TensorBoardLogger(
+            save_dir=str(PROJECT_DIR / "tensorboard_logs"),
+            name=run_name,
+        )
+
+        mlflow_logger = pl.loggers.MLFlowLogger(
+            experiment_name=exp_name,
+            run_name=run_name,
+            save_dir=str(PROJECT_DIR / "mlruns"),
+        )
 
         try:
             mlflow_logger = pl.loggers.MLFlowLogger(
@@ -640,6 +656,7 @@ class rlearn_model_soccer:
         run_split_train_test=False,
         run_preprocess_observation=False,
         run_train_and_test=False,
+        class_weight_only=False,
         run_visualize_data=False,
         test_mode=False,
         batch_size=64,
@@ -751,6 +768,7 @@ class rlearn_model_soccer:
                 checkpoint_save_top_k=checkpoint_save_top_k,
                 resume_checkpoint_path=resume_checkpoint_path,
                 test_mode=test_mode,
+                class_weight_only=class_weight_only,
             )
 
             # Auto-detect generated checkpoint for visualization
