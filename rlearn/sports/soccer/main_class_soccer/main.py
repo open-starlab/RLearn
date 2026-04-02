@@ -285,6 +285,82 @@ class rlearn_model_soccer:
         dataset.save_to_disk(str(self.output_path))
         logging.info(f"output_path: {self.output_path} (elapsed: {time.time() - start:.2f} sec)")
 
+    def _resolve_training_runtime(
+        self,
+        accelerator,
+        devices,
+        strategy,
+        exp_config: Dict[str, Any],
+        test_mode: bool,
+    ) -> tuple[str, int, str]:
+        if accelerator is None:
+            accelerator = "gpu" if torch.cuda.is_available() else "cpu"
+        if devices is None:
+            devices = 1
+        if strategy is None or accelerator == "cpu":
+            strategy = "auto"
+
+        if test_mode:
+            exp_config["max_epochs"] = 1
+            exp_config["datamodule"]["batch_size"] = min(exp_config["datamodule"]["batch_size"], 32)
+            accelerator = "cpu"
+            strategy = "auto"
+
+        return accelerator, devices, strategy
+
+    def _prepare_class_weights(
+        self,
+        exp_config: Dict[str, Any],
+        datamodule: DataModule,
+        use_class_weights: bool | None,
+    ) -> torch.Tensor | None:
+        should_use_class_weights = "class_weight_fn" in exp_config if use_class_weights is None else use_class_weights
+        if not should_use_class_weights:
+            logger.info("Skipping class weights.")
+            return None
+
+        if "class_weight_fn" not in exp_config:
+            raise ValueError("use_class_weights=True requires class_weight_fn in the experiment config.")
+
+        logger.info("Prepare class weights...")
+        start = time.time()
+        class_weight_fn = ClassWeightBase.from_params(exp_config["class_weight_fn"])
+        if class_weight_fn.class_weights is not None:
+            class_weights = class_weight_fn.class_weights
+        else:
+            logger.info("Calculating class weights...")
+            class_counts = torch.zeros(datamodule.state_action_tokenizer.num_tokens)
+            class_weight_batch_size = exp_config.get("class_weight_batch_size", 512)
+            for batch in tqdm(
+                datamodule.train_dataloader(batch_size=class_weight_batch_size),
+                desc="calculating class weights",
+            ):
+                valid_actions = torch.masked_select(batch["action"], batch["mask"].bool())
+                class_counts += torch.bincount(valid_actions, minlength=datamodule.state_action_tokenizer.num_tokens)
+            class_weights = class_weight_fn.calculate(class_counts=class_counts)
+
+        assert class_weights.shape[0] == datamodule.state_action_tokenizer.num_tokens, (
+            f"Class weights shape mismatch: {class_weights.shape[0]} != {datamodule.state_action_tokenizer.num_tokens}"
+        )
+        logger.info(f"Prepare class weights is done. {time.time() - start} sec")
+        return class_weights
+
+    def _resolve_resume_checkpoint_path(self, resume_checkpoint_path: str | None) -> str | None:
+        if resume_checkpoint_path is None:
+            return None
+
+        checkpoint_path = Path(resume_checkpoint_path).expanduser().resolve()
+        if not checkpoint_path.exists():
+            raise FileNotFoundError(f"Resume checkpoint not found: {checkpoint_path}")
+
+        logger.info(f"Resuming training from checkpoint: {checkpoint_path}")
+        return str(checkpoint_path)
+
+    def _resolve_output_base_dir(self, output_base_dir: str | None) -> Path:
+        if output_base_dir is None:
+            return OUTPUT_DIR
+        return Path(output_base_dir).expanduser().resolve()
+
     def train_and_test(
         self,
         exp_name,
@@ -296,27 +372,24 @@ class rlearn_model_soccer:
         max_games_csv=1,
         max_sequences_per_game_csv=5,
         test_mode=False,
+        use_class_weights: bool | None = None,
+        resume_checkpoint_path: str | None = None,
+        output_base_dir: str | None = None,
     ):
         seed_everything(self.seed)
         exp_config = load_json(self.config)
         config_copy = deepcopy(exp_config)
+        accelerator, devices, strategy = self._resolve_training_runtime(
+            accelerator=accelerator,
+            devices=devices,
+            strategy=strategy,
+            exp_config=exp_config,
+            test_mode=test_mode,
+        )
+        resume_checkpoint_path = self._resolve_resume_checkpoint_path(resume_checkpoint_path)
+        output_base_dir_path = self._resolve_output_base_dir(output_base_dir)
 
-        # Auto-detect device and set defaults for test mode
-        if accelerator is None:
-            accelerator = "gpu" if torch.cuda.is_available() else "cpu"
-        if devices is None:
-            devices = 1
-        if strategy is None:
-            strategy = "auto" if accelerator == "cpu" else "ddp"
-
-        # Override settings for test mode
-        if test_mode:
-            exp_config["max_epochs"] = 1
-            exp_config["datamodule"]["batch_size"] = min(exp_config["datamodule"]["batch_size"], 32)
-            accelerator = "cpu"
-            strategy = "auto"
-
-        output_dir = OUTPUT_DIR / exp_name / run_name
+        output_dir = output_base_dir_path / exp_name / run_name
         output_dir.mkdir(exist_ok=True, parents=True)
 
         logger.info("loading dataset...")
@@ -345,37 +418,21 @@ class rlearn_model_soccer:
             valid_dataset=valid_dataset,
             test_dataset=test_dataset,
         )
-        # count tokens and calculate class weights (the inverse of the frequency of each class)
-        # cache the class weights so that we need not calculate them every time
-        if "class_weight_fn" in exp_config:
-            logger.info("Prepare class weights...")
-            start = time.time()
-            class_weight_fn = ClassWeightBase.from_params(exp_config["class_weight_fn"])
-            if class_weight_fn.class_weights is not None:
-                class_weights = class_weight_fn.class_weights
-            else:
-                logger.info("Calculating class weights...")
-                class_counts = torch.zeros(datamodule.state_action_tokenizer.num_tokens)
-                for batch in tqdm(datamodule.train_dataloader(batch_size=512), desc="calculating class weights"):
-                    valid_actions = torch.masked_select(batch["action"], batch["mask"].bool())
-                    class_counts += torch.bincount(valid_actions, minlength=datamodule.state_action_tokenizer.num_tokens)
-                class_weights = class_weight_fn.calculate(class_counts=class_counts)
-            assert class_weights.shape[0] == datamodule.state_action_tokenizer.num_tokens, (
-                f"Class weights shape mismatch: {class_weights.shape[0]} != {datamodule.state_action_tokenizer.num_tokens}"
-            )
-            logger.info(f"Prepare class weights is done. {time.time() - start} sec")
-        else:
-            class_weights = None
+        class_weights = self._prepare_class_weights(
+            exp_config=exp_config,
+            datamodule=datamodule,
+            use_class_weights=use_class_weights,
+        )
 
         tensorboard_logger = pl.loggers.TensorBoardLogger(
-            save_dir=str(PROJECT_DIR / "tensorboard_logs"),
+            save_dir=str(output_base_dir_path / "tensorboard_logs"),
             name=run_name,
         )
 
         mlflow_logger = pl.loggers.MLFlowLogger(
             experiment_name=exp_name,
             run_name=run_name,
-            save_dir=str(PROJECT_DIR / "mlruns"),
+            save_dir=str(output_base_dir_path / "mlruns"),
         )
 
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
@@ -383,6 +440,7 @@ class rlearn_model_soccer:
             monitor="val_loss",
             mode="min",
             save_top_k=1,
+            save_last=True,
         )
         early_stopping_callback = pl.callbacks.EarlyStopping(
             monitor="val_loss",
@@ -420,7 +478,6 @@ class rlearn_model_soccer:
             "offball_action_idx": exp_config["offball_action_idx"],
             "onball_action_idx": exp_config["onball_action_idx"],
         }
-        params_["class_weights"] = params_["class_weights"].tolist() if params_["class_weights"] is not None else None
         params_.update(
             {
                 key: exp_config["model"][key]
@@ -435,17 +492,18 @@ class rlearn_model_soccer:
                 if key in exp_config["model"]
             }
         )
+        params_["class_weights"] = params_["class_weights"].tolist() if params_["class_weights"] is not None else None
 
         model = QModelBase.from_params(params_=params_)
 
-        trainer.fit(model=model, datamodule=datamodule)
+        trainer.fit(model=model, datamodule=datamodule, ckpt_path=resume_checkpoint_path)
         trainer.test(model=model, dataloaders=datamodule.test_dataloader())
         save_formatted_json(config_copy, output_dir / "config.json")
 
         # Save Q-values to CSV if requested
         if save_q_values_csv:
             model_name = self.config.split("/")[-1].split(".")[0]
-            save_dir = OUTPUT_DIR / "figures" / model_name
+            save_dir = output_base_dir_path / "figures" / model_name
             save_q_values_to_csv(
                 model=model,
                 datamodule=datamodule,
@@ -598,9 +656,9 @@ class rlearn_model_soccer:
         batch_size=64,
         exp_name=None,
         run_name=None,
-        accelerator="gpu",
-        devices=1,
-        strategy="ddp",
+        accelerator=None,
+        devices=None,
+        strategy=None,
         save_q_values_csv=False,
         max_games_csv=1,
         max_sequences_per_game_csv=5,
@@ -613,6 +671,9 @@ class rlearn_model_soccer:
         viz_style="radar",
         movie_output_dir=None,
         keep_frames=True,
+        use_class_weights: bool | None = None,
+        resume_checkpoint_path: str | None = None,
+        output_base_dir: str | None = None,
     ):
         # Store original paths
         original_input_path = self.input_path
@@ -692,15 +753,18 @@ class rlearn_model_soccer:
                 accelerator=accelerator,
                 devices=devices,
                 strategy=strategy,
+                use_class_weights=use_class_weights,
+                resume_checkpoint_path=resume_checkpoint_path,
+                output_base_dir=output_base_dir,
                 save_q_values_csv=save_q_values_csv,
                 max_games_csv=max_games_csv,
-                max_sequences_per_game=max_sequences_per_game_csv,
+                max_sequences_per_game_csv=max_sequences_per_game_csv,
                 test_mode=test_mode,
             )
 
             # Auto-detect generated checkpoint for visualization
             if run_visualize_data and not checkpoint_path:
-                checkpoint_dir = OUTPUT_DIR / exp_name / run_name / "checkpoints"
+                checkpoint_dir = self._resolve_output_base_dir(output_base_dir) / exp_name / run_name / "checkpoints"
                 if checkpoint_dir.exists():
                     checkpoint_files = list(checkpoint_dir.glob("*.ckpt"))
                     if checkpoint_files:
@@ -747,6 +811,7 @@ if __name__ == "__main__":
     #     num_process=5,
     # ).run_rlearn(run_preprocess_observation=True)
 
+    # Pattern 1: initial run
     # rlearn_model_soccer(
     #     state_def="PVS",
     #     config=os.getcwd() + "/test/config/exp_config.json",
@@ -755,9 +820,47 @@ if __name__ == "__main__":
     #     exp_config_path=os.getcwd() + "/test/config/exp_config.json",
     #     exp_name="sarsa_attacker",
     #     run_name="test",
-    #     accelerator="gpu",
-    #     devices=1,
-    #     strategy="ddp",
+    #     accelerator=None,
+    #     devices=None,
+    #     strategy=None,
+    #     use_class_weights=False,
+    #     save_q_values_csv=True,
+    #     max_games_csv=1,
+    #     max_sequences_per_game_csv=5,
+    # )
+
+    # Pattern 2: reuse cached class weights
+    # rlearn_model_soccer(
+    #     state_def="PVS",
+    #     config=os.getcwd() + "/test/config/exp_config.json",
+    # ).run_rlearn(
+    #     run_train_and_test=True,
+    #     exp_config_path=os.getcwd() + "/test/config/exp_config.json",
+    #     exp_name="sarsa_attacker",
+    #     run_name="test",
+    #     accelerator=None,
+    #     devices=None,
+    #     strategy=None,
+    #     use_class_weights=True,
+    #     save_q_values_csv=True,
+    #     max_games_csv=1,
+    #     max_sequences_per_game_csv=5,
+    # )
+
+    # Pattern 3: resume from last.ckpt
+    # rlearn_model_soccer(
+    #     state_def="PVS",
+    #     config=os.getcwd() + "/test/config/exp_config.json",
+    # ).run_rlearn(
+    #     run_train_and_test=True,
+    #     exp_config_path=os.getcwd() + "/test/config/exp_config.json",
+    #     exp_name="sarsa_attacker",
+    #     run_name="test",
+    #     accelerator=None,
+    #     devices=None,
+    #     strategy=None,
+    #     resume_checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/last.ckpt",
+    #     use_class_weights=False,
     #     save_q_values_csv=True,
     #     max_games_csv=1,
     #     max_sequences_per_game_csv=5,
