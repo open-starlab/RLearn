@@ -2,6 +2,7 @@ import logging
 import re
 from pathlib import Path
 import os
+import shutil
 from typing import Any, Dict
 from copy import deepcopy
 import time
@@ -12,7 +13,6 @@ from sklearn.model_selection import train_test_split
 import pytorch_lightning as pl
 import torch
 import warnings
-from lightning_lite.utilities.seed import seed_everything
 
 
 from ..dataclass import (
@@ -371,12 +371,16 @@ class rlearn_model_soccer:
         save_q_values_csv=False,
         max_games_csv=1,
         max_sequences_per_game_csv=5,
+        save_intermediate_checkpoints=False,
+        checkpoint_every_n_epochs=1,
+        checkpoint_save_top_k=-1,
         test_mode=False,
         use_class_weights: bool | None = None,
         resume_checkpoint_path: str | None = None,
         output_base_dir: str | None = None,
+        class_weight_only=False,
     ):
-        seed_everything(self.seed)
+        pl.seed_everything(self.seed)
         exp_config = load_json(self.config)
         config_copy = deepcopy(exp_config)
         accelerator, devices, strategy = self._resolve_training_runtime(
@@ -394,23 +398,29 @@ class rlearn_model_soccer:
 
         logger.info("loading dataset...")
         train_dataset = load_from_disk(Path(exp_config["dataset"]["train_filename"]).resolve())
-        valid_dataset = load_from_disk(Path(exp_config["dataset"]["valid_filename"]).resolve())
-        test_dataset = load_from_disk(Path(exp_config["dataset"]["test_filename"]).resolve())
+        valid_dataset = None
+        test_dataset = None
+        if not class_weight_only:
+            valid_dataset = load_from_disk(Path(exp_config["dataset"]["valid_filename"]).resolve())
+            test_dataset = load_from_disk(Path(exp_config["dataset"]["test_filename"]).resolve())
         logger.info("Preprocessing dataset...")
         start = time.time()
         train_dataset = DataModule.by_name(exp_config["datamodule"]["type"]).preprocess_data(
             train_dataset, self.state_def, **exp_config["dataset"]["preprocess_config"]
         )
-        valid_dataset = DataModule.by_name(exp_config["datamodule"]["type"]).preprocess_data(
-            valid_dataset, self.state_def, **exp_config["dataset"]["preprocess_config"]
-        )
-        test_dataset = DataModule.by_name(exp_config["datamodule"]["type"]).preprocess_data(
-            test_dataset, self.state_def, **exp_config["dataset"]["preprocess_config"]
-        )
+        if not class_weight_only:
+            valid_dataset = DataModule.by_name(exp_config["datamodule"]["type"]).preprocess_data(
+                valid_dataset, self.state_def, **exp_config["dataset"]["preprocess_config"]
+            )
+            test_dataset = DataModule.by_name(exp_config["datamodule"]["type"]).preprocess_data(
+                test_dataset, self.state_def, **exp_config["dataset"]["preprocess_config"]
+            )
         logger.info(f"Preprocessing dataset is done. {time.time() - start} sec")
         logger.info(f"Train dataset size: {len(train_dataset)}")
-        logger.info(f"Valid dataset size: {len(valid_dataset)}")
-        logger.info(f"Test dataset size: {len(test_dataset)}")
+        if valid_dataset is not None:
+            logger.info(f"Valid dataset size: {len(valid_dataset)}")
+        if test_dataset is not None:
+            logger.info(f"Test dataset size: {len(test_dataset)}")
 
         datamodule = DataModule.from_params(
             params_=exp_config["datamodule"],
@@ -424,34 +434,64 @@ class rlearn_model_soccer:
             use_class_weights=use_class_weights,
         )
 
+        if class_weight_only:
+            if class_weights is None:
+                raise ValueError("class_weight_only=True requires `class_weight_fn` in exp config.")
+            logger.info("class_weight_only=True: class weights prepared. Skipping training and testing.")
+            return
+
         tensorboard_logger = pl.loggers.TensorBoardLogger(
             save_dir=str(output_base_dir_path / "tensorboard_logs"),
             name=run_name,
         )
+        training_loggers = [tensorboard_logger]
 
-        mlflow_logger = pl.loggers.MLFlowLogger(
-            experiment_name=exp_name,
-            run_name=run_name,
-            save_dir=str(output_base_dir_path / "mlruns"),
-        )
+        try:
+            mlflow_logger = pl.loggers.MLFlowLogger(
+                experiment_name=exp_name,
+                run_name=run_name,
+                save_dir=str(output_base_dir_path / "mlruns"),
+            )
+            training_loggers.append(mlflow_logger)
+        except ModuleNotFoundError as exc:
+            logger.warning(f"MLflow logger is disabled because dependency is missing: {exc}")
 
-        checkpoint_callback = pl.callbacks.ModelCheckpoint(
-            dirpath=output_dir / "checkpoints",
-            monitor="val_loss",
-            mode="min",
-            save_top_k=1,
-            save_last=True,
-        )
+        checkpoint_filename = "{epoch:02d}-{step}-val_loss={val_loss:.4f}"
+        if save_intermediate_checkpoints:
+            checkpoint_callback = pl.callbacks.ModelCheckpoint(
+                dirpath=output_dir / "checkpoints",
+                monitor="val_loss",
+                mode="min",
+                every_n_epochs=checkpoint_every_n_epochs,
+                save_top_k=checkpoint_save_top_k,
+                filename=checkpoint_filename,
+                auto_insert_metric_name=False,
+                save_last=True,
+                save_on_exception=True,
+            )
+        else:
+            checkpoint_callback = pl.callbacks.ModelCheckpoint(
+                dirpath=output_dir / "checkpoints",
+                monitor="val_loss",
+                mode="min",
+                save_top_k=1,
+                filename=checkpoint_filename,
+                auto_insert_metric_name=False,
+                save_last=True,
+                save_on_exception=True,
+            )
+        callbacks = [checkpoint_callback]
         early_stopping_callback = pl.callbacks.EarlyStopping(
             monitor="val_loss",
             patience=5,
             mode="min",
             min_delta=0.01,
         )
+        callbacks.append(early_stopping_callback)
         trainer = pl.Trainer(
             max_epochs=exp_config["max_epochs"],
-            logger=[tensorboard_logger, mlflow_logger],
-            callbacks=[checkpoint_callback, early_stopping_callback],
+            logger=training_loggers if training_loggers else False,
+            callbacks=callbacks,
             accelerator=accelerator,
             devices=devices,
             strategy=strategy,
@@ -497,6 +537,16 @@ class rlearn_model_soccer:
         model = QModelBase.from_params(params_=params_)
 
         trainer.fit(model=model, datamodule=datamodule, ckpt_path=resume_checkpoint_path)
+        
+        if checkpoint_callback.best_model_path:
+            best_ckpt_src = Path(checkpoint_callback.best_model_path)
+            best_ckpt_dst = output_dir / "checkpoints" / f"best-{best_ckpt_src.stem}.ckpt"
+            if best_ckpt_src.resolve() != best_ckpt_dst.resolve():
+                shutil.copy2(best_ckpt_src, best_ckpt_dst)
+            logger.info(f"Best checkpoint: {best_ckpt_src} (alias: {best_ckpt_dst})")
+        else:
+            logger.warning("Best checkpoint was not created. Check ModelCheckpoint settings.")
+            
         trainer.test(model=model, dataloaders=datamodule.test_dataloader())
         save_formatted_json(config_copy, output_dir / "config.json")
 
@@ -651,6 +701,7 @@ class rlearn_model_soccer:
         run_split_train_test=False,
         run_preprocess_observation=False,
         run_train_and_test=False,
+        class_weight_only=False,
         run_visualize_data=False,
         test_mode=False,
         batch_size=64,
@@ -662,6 +713,9 @@ class rlearn_model_soccer:
         save_q_values_csv=False,
         max_games_csv=1,
         max_sequences_per_game_csv=5,
+        save_intermediate_checkpoints=False,
+        checkpoint_every_n_epochs=1,
+        checkpoint_save_top_k=-1,
         model_name=None,
         exp_config_path=None,
         checkpoint_path=None,
@@ -754,12 +808,16 @@ class rlearn_model_soccer:
                 devices=devices,
                 strategy=strategy,
                 use_class_weights=use_class_weights,
-                resume_checkpoint_path=resume_checkpoint_path,
                 output_base_dir=output_base_dir,
                 save_q_values_csv=save_q_values_csv,
                 max_games_csv=max_games_csv,
                 max_sequences_per_game_csv=max_sequences_per_game_csv,
+                save_intermediate_checkpoints=save_intermediate_checkpoints,
+                checkpoint_every_n_epochs=checkpoint_every_n_epochs,
+                checkpoint_save_top_k=checkpoint_save_top_k,
+                resume_checkpoint_path=resume_checkpoint_path,
                 test_mode=test_mode,
+                class_weight_only=class_weight_only,
             )
 
             # Auto-detect generated checkpoint for visualization
@@ -860,7 +918,8 @@ if __name__ == "__main__":
     #     devices=None,
     #     strategy=None,
     #     resume_checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/last.ckpt",
-    #     use_class_weights=False,
+    #     save_intermediate_checkpoints=True,
+    #     use_class_weights=True,
     #     save_q_values_csv=True,
     #     max_games_csv=1,
     #     max_sequences_per_game_csv=5,
