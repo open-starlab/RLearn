@@ -1,5 +1,10 @@
-# from /home/c_yeung/workspace6/python/openstarlab/Event/event/sports/soccer/main_class_soccer/main.py
 from .soccer.main_class_soccer.main import rlearn_model_soccer
+from .soccer.main_class_soccer.run_rlearn_config import (
+    PreprocessObservationConfig,
+    SplitTrainTestConfig,
+    TrainAndTestConfig,
+    VisualizeDataConfig,
+)
 
 
 class RLearn_Model:
@@ -20,7 +25,10 @@ if __name__ == "__main__":
     #     state_def="PVS",
     #     input_path=os.getcwd() + "/test/data/dss/",
     #     output_path=os.getcwd() + "/test/data/dss/split/",
-    # ).run_rlearn(run_split_train_test=True)
+    # ).run_rlearn(
+    #     run_split_train_test=True,
+    #     split_config=SplitTrainTestConfig(),
+    # )
 
     # # test preprocess observation data
     # RLearn_Model(
@@ -29,16 +37,22 @@ if __name__ == "__main__":
     #     input_path=os.getcwd() + "/test/data/dss/split/mini",
     #     output_path=os.getcwd() + "/test/data/dss_simple_obs_action_seq/split/mini",
     #     num_process=5,
-    # ).run_rlearn(run_preprocess_observation=True, batch_size=64)
+    # ).run_rlearn(
+    #     run_preprocess_observation=True,
+    #     preprocess_config=PreprocessObservationConfig(batch_size=64),
+    # )
 
     # # test train model
     # RLearn_Model(state_def="PVS", config=os.getcwd() + "/test/config/exp_config.json").run_rlearn(
     #     run_train_and_test=True,
-    #     exp_name="sarsa_attacker",
-    #     run_name="test",
-    #     accelerator="gpu",
-    #     devices=1,
-    #     strategy="ddp",
+    #     train_and_test_config=TrainAndTestConfig(
+    #         exp_name="sarsa_attacker",
+    #         run_name="test",
+    #         exp_config_path=os.getcwd() + "/test/config/exp_config.json",
+    #         accelerator="gpu",
+    #         devices=1,
+    #         strategy="ddp",
+    #     ),
     # )
 
     # # test visualize
@@ -46,12 +60,14 @@ if __name__ == "__main__":
     #     state_def="PVS",
     # ).run_rlearn(
     #     run_visualize_data=True,
-    #     model_name="exp_config",
-    #     exp_config_path=os.getcwd() + "/test/config/exp_config.json",
-    #     checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=1-step=2.ckpt",
-    #     tracking_file_path=os.getcwd() + "/test/data/dss/preprocess_data/2022100106/events.jsonl",
-    #     match_id="2022100106",
-    #     sequence_id=0,
+    #     visualize_config=VisualizeDataConfig(
+    #         model_name="exp_config",
+    #         exp_config_path=os.getcwd() + "/test/config/exp_config.json",
+    #         checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=1-step=2.ckpt",
+    #         tracking_file_path=os.getcwd() + "/test/data/dss/preprocess_data/2022100106/events.jsonl",
+    #         match_id="2022100106",
+    #         sequence_id=0,
+    #     ),
     # )
 
     # print("Individual tests")
@@ -70,20 +86,25 @@ if __name__ == "__main__":
     #     run_preprocess_observation=True,
     #     run_train_and_test=True,
     #     run_visualize_data=True,
-    #     batch_size=64,
-    #     exp_name="sarsa_attacker",
-    #     run_name="full_pipeline_test",
-    #     accelerator="gpu",
-    #     devices=1,
-    #     strategy="ddp",
-    #     save_q_values_csv=True,
-    #     max_games_csv=1,
-    #     max_sequences_per_game_csv=5,
-    #     model_name="exp_config",
-    #     exp_config_path=os.getcwd() + "/test/config/exp_config.json",
-    #     tracking_file_path=os.getcwd() + "/test/data/fifawc/preprocess_data/3812/events.jsonl",
-    #     match_id="3812",
-    #     sequence_id=0,
+    #     split_config=SplitTrainTestConfig(),
+    #     preprocess_config=PreprocessObservationConfig(batch_size=64),
+    #     train_and_test_config=TrainAndTestConfig(
+    #         exp_name="sarsa_attacker",
+    #         run_name="full_pipeline_test",
+    #         exp_config_path=os.getcwd() + "/test/config/exp_config.json",
+    #         accelerator="gpu",
+    #         devices=1,
+    #         strategy="ddp",
+    #         save_q_values_csv=True,
+    #         max_games_csv=1,
+    #         max_sequences_per_game_csv=5,
+    #     ),
+    #     visualize_config=VisualizeDataConfig(
+    #         model_name="exp_config",
+    #         tracking_file_path=os.getcwd() + "/test/data/fifawc/preprocess_data/3812/events.jsonl",
+    #         match_id="3812",
+    #         sequence_id=0,
+    #     ),
     # )
 
     # print("Full pipeline completed successfully!")
