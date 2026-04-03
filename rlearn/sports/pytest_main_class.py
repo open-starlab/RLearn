@@ -1,4 +1,10 @@
 from .soccer.main_class_soccer.main import rlearn_model_soccer
+from .soccer.main_class_soccer.run_rlearn_config import (
+    PreprocessObservationConfig,
+    SplitTrainTestConfig,
+    TrainAndTestConfig,
+    VisualizeDataConfig,
+)
 
 
 class RLearn_Model:
@@ -17,7 +23,10 @@ class RLearn_Model:
 #         state_def="PVS",
 #         input_path="test/data/dss/preprocess_data/",
 #         output_path="test/data/dss/preprocess_data/split/",
-#     ).run_rlearn(run_split_train_test=True, test_mode=True)
+#     ).run_rlearn(
+#         run_split_train_test=True,
+#         split_config=SplitTrainTestConfig(test_mode=True),
+#     )
 
 
 # def test_PVS_preprocess_only():
@@ -28,17 +37,22 @@ class RLearn_Model:
 #         input_path="test/data/dss/preprocess_data/split/mini",
 #         output_path="test/data/dss_simple_obs_action_seq/split/mini",
 #         num_process=3,
-#     ).run_rlearn(run_preprocess_observation=True, batch_size=64, test_mode=True)
+#     ).run_rlearn(
+#         run_preprocess_observation=True,
+#         preprocess_config=PreprocessObservationConfig(batch_size=64, test_mode=True),
+#     )
 
 
 # def test_PVS_train_only():
 #     # test train model only
 #     RLearn_Model(state_def="PVS", config="test/config/exp_config.json").run_rlearn(
 #         run_train_and_test=True,
-#         exp_name="sarsa_attacker",
-#         run_name="test_train_only",
-#         exp_config_path="test/config/exp_config.json",
-#         test_mode=True,
+#         train_and_test_config=TrainAndTestConfig(
+#             exp_name="sarsa_attacker",
+#             run_name="test_train_only",
+#             exp_config_path="test/config/exp_config.json",
+#             test_mode=True,
+#         ),
 #     )
 
 
@@ -56,15 +70,21 @@ def test_PVS_full_pipeline():
         run_preprocess_observation=True,
         run_train_and_test=True,
         run_visualize_data=True,
-        batch_size=32,
-        exp_name="sarsa_attacker",
-        run_name="full_pipeline_test",
-        exp_config_path="test/config/exp_config.json",
-        model_name="exp_config",
-        tracking_file_path="test/data/dss/preprocess_data/2022100106/events.jsonl",
-        match_id="2022100106",
-        sequence_id=0,
-        test_mode=True,
+        split_config=SplitTrainTestConfig(test_mode=True),
+        preprocess_config=PreprocessObservationConfig(batch_size=32, test_mode=True),
+        train_and_test_config=TrainAndTestConfig(
+            exp_name="sarsa_attacker",
+            run_name="full_pipeline_test",
+            exp_config_path="test/config/exp_config.json",
+            test_mode=True,
+        ),
+        visualize_config=VisualizeDataConfig(
+            model_name="exp_config",
+            tracking_file_path="test/data/dss/preprocess_data/2022100106/events.jsonl",
+            match_id="2022100106",
+            sequence_id=0,
+            test_mode=True,
+        ),
     )
 
 

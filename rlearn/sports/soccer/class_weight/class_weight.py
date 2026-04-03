@@ -11,12 +11,12 @@ logging.basicConfig(level=logging.INFO)
 class ClassWeightBase(Registrable):
     def __init__(self, cache_path: str | Path | None = None, **kwargs):
         super().__init__()
-        self.cache_path = Path(cache_path)
+        self.cache_path = Path(cache_path) if cache_path is not None else None
         self.class_weights: torch.Tensor | None = None
-        if cache_path is not None:
+        if self.cache_path is not None:
             if self.cache_path.exists():
                 logger.info(f"Loading class weights from {self.cache_path}")
-                self.class_weights = torch.load(self.cache_path)
+                self.class_weights = torch.load(self.cache_path, map_location=torch.device("cpu"))
             else:
                 logger.info(f"No cache found at {self.cache_path}")
 
