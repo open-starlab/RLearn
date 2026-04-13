@@ -13,7 +13,6 @@ from sklearn.model_selection import train_test_split
 import pytorch_lightning as pl
 import torch
 import warnings
-from pytorch_lightning import seed_everything
 
 
 from ..dataclass import (
@@ -27,12 +26,26 @@ from ..dataclass import (
     SimpleObservationActionSequence_EDMS,
 )
 from ..utils.file_utils import load_json, save_formatted_json
-from ..env import OUTPUT_DIR, PROJECT_DIR
+from ..env import PROJECT_DIR
 from ..models.q_model_base import QModelBase
 from ..modules.datamodule import DataModule
-from ..class_weight.class_weight import ClassWeightBase
 from ..application.q_values_movie import create_movie
 from ..application.q_values_csv import save_q_values_to_csv
+from .run_rlearn_config import (
+    PreprocessObservationConfig,
+    SplitTrainTestConfig,
+    TrainAndTestConfig,
+    VisualizeDataConfig,
+)
+from .run_rlearn_helpers import (
+    build_training_config_for_preprocessed_data,
+    prepare_class_weights,
+    preprocess_split_datasets,
+    resolve_latest_checkpoint_path,
+    resolve_output_base_dir,
+    resolve_resume_checkpoint_path,
+    resolve_training_runtime,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -299,28 +312,30 @@ class rlearn_model_soccer:
         save_intermediate_checkpoints=False,
         checkpoint_every_n_epochs=1,
         checkpoint_save_top_k=-1,
-        resume_checkpoint_path=None,
         test_mode=False,
+        use_class_weights: bool | None = None,
+        resume_checkpoint_path: str | None = None,
+        output_base_dir: str | None = None,
         class_weight_only=False,
     ):
         pl.seed_everything(self.seed)
         exp_config = load_json(self.config)
         config_copy = deepcopy(exp_config)
+        accelerator, devices, strategy = resolve_training_runtime(
+            accelerator=accelerator,
+            devices=devices,
+            strategy=strategy,
+            exp_config=exp_config,
+            test_mode=test_mode,
+        )
+        resume_checkpoint_path = resolve_resume_checkpoint_path(
+            resume_checkpoint_path=resume_checkpoint_path,
+            logger=logger,
+        )
+        output_base_dir_path = resolve_output_base_dir(output_base_dir)
 
-        # Auto-detect device and set defaults for test mode
-        if accelerator is None:
-            accelerator = "gpu" if torch.cuda.is_available() else "cpu"
-        if devices is None:
-            devices = 1
-        if strategy is None:
-            strategy = "auto" if accelerator == "cpu" else "ddp"
-
-        # Override settings for test mode
-        if test_mode:
-            exp_config["max_epochs"] = 1
-            exp_config["datamodule"]["batch_size"] = min(exp_config["datamodule"]["batch_size"], 32)
-            accelerator = "cpu"
-            strategy = "auto"
+        output_dir = output_base_dir_path / exp_name / run_name
+        output_dir.mkdir(exist_ok=True, parents=True)
 
         logger.info("loading dataset...")
         train_dataset = load_from_disk(Path(exp_config["dataset"]["train_filename"]).resolve())
@@ -354,28 +369,12 @@ class rlearn_model_soccer:
             valid_dataset=valid_dataset,
             test_dataset=test_dataset,
         )
-        # count tokens and calculate class weights (the inverse of the frequency of each class)
-        # cache the class weights so that we need not calculate them every time
-        if "class_weight_fn" in exp_config:
-            logger.info("Prepare class weights...")
-            start = time.time()
-            class_weight_fn = ClassWeightBase.from_params(exp_config["class_weight_fn"])
-            if class_weight_fn.class_weights is not None:
-                class_weights = class_weight_fn.class_weights
-                logger.info("Using provided class weights from config.")
-            else:
-                logger.info("Calculating class weights...")
-                class_counts = torch.zeros(datamodule.state_action_tokenizer.num_tokens)
-                for batch in tqdm(datamodule.train_dataloader(batch_size=512), desc="calculating class weights"):
-                    valid_actions = torch.masked_select(batch["action"], batch["mask"].bool())
-                    class_counts += torch.bincount(valid_actions, minlength=datamodule.state_action_tokenizer.num_tokens)
-                class_weights = class_weight_fn.calculate(class_counts=class_counts)
-            assert class_weights.shape[0] == datamodule.state_action_tokenizer.num_tokens, (
-                f"Class weights shape mismatch: {class_weights.shape[0]} != {datamodule.state_action_tokenizer.num_tokens}"
-            )
-            logger.info(f"Prepare class weights is done. {time.time() - start} sec")
-        else:
-            class_weights = None
+        class_weights = prepare_class_weights(
+            exp_config=exp_config,
+            datamodule=datamodule,
+            use_class_weights=use_class_weights,
+            logger=logger,
+        )
 
         if class_weight_only:
             if class_weights is None:
@@ -383,25 +382,17 @@ class rlearn_model_soccer:
             logger.info("class_weight_only=True: class weights prepared. Skipping training and testing.")
             return
 
-        output_dir = OUTPUT_DIR / exp_name / run_name
-        output_dir.mkdir(exist_ok=True, parents=True)
-
         tensorboard_logger = pl.loggers.TensorBoardLogger(
-            save_dir=str(PROJECT_DIR / "tensorboard_logs"),
+            save_dir=str(output_base_dir_path / "tensorboard_logs"),
             name=run_name,
         )
-
-        mlflow_logger = pl.loggers.MLFlowLogger(
-            experiment_name=exp_name,
-            run_name=run_name,
-            save_dir=str(PROJECT_DIR / "mlruns"),
-        )
+        training_loggers = [tensorboard_logger]
 
         try:
             mlflow_logger = pl.loggers.MLFlowLogger(
                 experiment_name=exp_name,
                 run_name=run_name,
-                save_dir=str(PROJECT_DIR / "mlruns"),
+                save_dir=str(output_base_dir_path / "mlruns"),
             )
             training_loggers.append(mlflow_logger)
         except ModuleNotFoundError as exc:
@@ -469,7 +460,6 @@ class rlearn_model_soccer:
             "offball_action_idx": exp_config["offball_action_idx"],
             "onball_action_idx": exp_config["onball_action_idx"],
         }
-        params_["class_weights"] = params_["class_weights"].tolist() if params_["class_weights"] is not None else None
         params_.update(
             {
                 key: exp_config["model"][key]
@@ -484,16 +474,17 @@ class rlearn_model_soccer:
                 if key in exp_config["model"]
             }
         )
+        params_["class_weights"] = params_["class_weights"].tolist() if params_["class_weights"] is not None else None
 
         model = QModelBase.from_params(params_=params_)
 
-        fit_ckpt_path = None
-        if resume_checkpoint_path:
-            fit_ckpt_path = str(Path(resume_checkpoint_path).expanduser().resolve())
-            if not Path(fit_ckpt_path).exists():
-                raise FileNotFoundError(f"resume checkpoint not found: {fit_ckpt_path}")
-            logger.info(f"Resuming training from checkpoint: {fit_ckpt_path}")
-        trainer.fit(model=model, datamodule=datamodule, ckpt_path=fit_ckpt_path)
+        if resume_checkpoint_path is None:
+            logger.info("Starting training from scratch.")
+        else:
+            logger.info(f"Starting training by resuming from checkpoint: {resume_checkpoint_path}")
+
+        trainer.fit(model=model, datamodule=datamodule, ckpt_path=resume_checkpoint_path)
+        
         if checkpoint_callback.best_model_path:
             best_ckpt_src = Path(checkpoint_callback.best_model_path)
             best_ckpt_dst = output_dir / "checkpoints" / f"best-{best_ckpt_src.stem}.ckpt"
@@ -502,13 +493,14 @@ class rlearn_model_soccer:
             logger.info(f"Best checkpoint: {best_ckpt_src} (alias: {best_ckpt_dst})")
         else:
             logger.warning("Best checkpoint was not created. Check ModelCheckpoint settings.")
+            
         trainer.test(model=model, dataloaders=datamodule.test_dataloader())
         save_formatted_json(config_copy, output_dir / "config.json")
 
         # Save Q-values to CSV if requested
         if save_q_values_csv:
             model_name = self.config.split("/")[-1].split(".")[0]
-            save_dir = OUTPUT_DIR / "figures" / model_name
+            save_dir = output_base_dir_path / "figures" / model_name
             save_q_values_to_csv(
                 model=model,
                 datamodule=datamodule,
@@ -656,146 +648,101 @@ class rlearn_model_soccer:
         run_split_train_test=False,
         run_preprocess_observation=False,
         run_train_and_test=False,
-        class_weight_only=False,
         run_visualize_data=False,
-        test_mode=False,
-        batch_size=64,
-        exp_name=None,
-        run_name=None,
-        accelerator="gpu",
-        devices=1,
-        strategy="ddp",
-        save_q_values_csv=False,
-        max_games_csv=1,
-        max_sequences_per_game_csv=5,
-        save_intermediate_checkpoints=False,
-        checkpoint_every_n_epochs=1,
-        checkpoint_save_top_k=-1,
-        resume_checkpoint_path=None,
-        model_name=None,
-        exp_config_path=None,
-        checkpoint_path=None,
-        tracking_file_path=None,
-        match_id=None,
-        sequence_id=None,
-        viz_style="radar",
-        movie_output_dir=None,
-        keep_frames=True,
+        split_config: SplitTrainTestConfig | None = None,
+        preprocess_config: PreprocessObservationConfig | None = None,
+        train_and_test_config: TrainAndTestConfig | None = None,
+        visualize_config: VisualizeDataConfig | None = None,
     ):
+        """Run the selected pipeline steps with step-specific configuration."""
         # Store original paths
         original_input_path = self.input_path
         original_output_path = self.output_path
         original_config = self.config
+        split_config = split_config or SplitTrainTestConfig()
+        preprocess_config = preprocess_config or PreprocessObservationConfig()
+        train_and_test_config = train_and_test_config or TrainAndTestConfig()
+        visualize_config = visualize_config or VisualizeDataConfig()
+        preprocessed_output_base = None
 
         if run_split_train_test:
-            self.split_train_test(test_mode=test_mode)
+            self.split_train_test(test_mode=split_config.test_mode)
 
         if run_preprocess_observation:
-            # Process datasets based on test mode
-            if test_mode:
-                # Test mode: only process mini dataset
-                datasets_to_process = ["mini"]
-            else:
-                # Normal mode: process all datasets
-                datasets_to_process = ["train", "validation", "test", "mini"]
-
             if run_split_train_test and original_input_path and original_output_path:
-                # Full pipeline: process split datasets
-                base_output_dir = (
-                    Path(original_output_path).parent / f"{Path(original_output_path).name}_simple_obs_action_seq"
+                preprocessed_output_base = preprocess_split_datasets(
+                    model=self,
+                    original_output_path=original_output_path,
+                    preprocess_config=preprocess_config,
+                    logger=logger,
                 )
-
-                for dataset_name in datasets_to_process:
-                    # Update paths for each dataset
-                    self.input_path = str(Path(original_output_path) / dataset_name)
-                    self.output_path = str(base_output_dir / dataset_name)
-
-                    # Check if input dataset exists before processing
-                    if Path(self.input_path).exists():
-                        logger.info(f"Processing {dataset_name} dataset...")
-                        self.preprocess_observation(batch_size=batch_size)
-                    else:
-                        logger.warning(f"Dataset {dataset_name} not found at {self.input_path}, skipping...")
-
-                # Store the preprocessed output base path for later steps
-                preprocessed_output_base = str(base_output_dir)
             else:
-                # Single dataset processing (existing behavior)
-                self.preprocess_observation(batch_size=batch_size)
+                self.preprocess_observation(batch_size=preprocess_config.batch_size)
                 preprocessed_output_base = self.output_path
 
         if run_train_and_test:
-            if not exp_config_path:
+            if not train_and_test_config.exp_config_path:
                 raise ValueError("exp_config_path must be provided when running training.")
 
             if run_preprocess_observation:
-                # Full pipeline: update config to use preprocessed data paths
-                config_data = load_json(exp_config_path)
-
-                if test_mode:
-                    # Test mode: use mini dataset for all splits
-                    mini_path = str(Path(preprocessed_output_base) / "mini")
-                    config_data["dataset"]["train_filename"] = mini_path
-                    config_data["dataset"]["valid_filename"] = mini_path
-                    config_data["dataset"]["test_filename"] = mini_path
-                else:
-                    # Normal mode: use proper train/validation/test splits
-                    config_data["dataset"]["train_filename"] = str(Path(preprocessed_output_base) / "train")
-                    config_data["dataset"]["valid_filename"] = str(Path(preprocessed_output_base) / "validation")
-                    config_data["dataset"]["test_filename"] = str(Path(preprocessed_output_base) / "test")
-
-                # Save updated config file
-                updated_config_path = Path(preprocessed_output_base) / "updated_exp_config.json"
-                updated_config_path.parent.mkdir(parents=True, exist_ok=True)
-                save_formatted_json(config_data, updated_config_path)
-
-                self.config = str(updated_config_path)
+                if preprocessed_output_base is None:
+                    raise ValueError("preprocessed_output_base must be available when run_preprocess_observation=True.")
+                self.config = build_training_config_for_preprocessed_data(
+                    exp_config_path=train_and_test_config.exp_config_path,
+                    preprocessed_output_base=preprocessed_output_base,
+                    test_mode=train_and_test_config.test_mode,
+                )
             else:
-                # Single training: use exp_config_path directly
-                self.config = exp_config_path
+                self.config = train_and_test_config.exp_config_path
 
             self.train_and_test(
-                exp_name=exp_name,
-                run_name=run_name,
-                accelerator=accelerator,
-                devices=devices,
-                strategy=strategy,
-                save_q_values_csv=save_q_values_csv,
-                max_games_csv=max_games_csv,
-                max_sequences_per_game_csv=max_sequences_per_game_csv,
-                save_intermediate_checkpoints=save_intermediate_checkpoints,
-                checkpoint_every_n_epochs=checkpoint_every_n_epochs,
-                checkpoint_save_top_k=checkpoint_save_top_k,
-                resume_checkpoint_path=resume_checkpoint_path,
-                test_mode=test_mode,
-                class_weight_only=class_weight_only,
+                exp_name=train_and_test_config.exp_name,
+                run_name=train_and_test_config.run_name,
+                accelerator=train_and_test_config.accelerator,
+                devices=train_and_test_config.devices,
+                strategy=train_and_test_config.strategy,
+                use_class_weights=train_and_test_config.use_class_weights,
+                output_base_dir=train_and_test_config.output_base_dir,
+                save_q_values_csv=train_and_test_config.save_q_values_csv,
+                max_games_csv=train_and_test_config.max_games_csv,
+                max_sequences_per_game_csv=train_and_test_config.max_sequences_per_game_csv,
+                save_intermediate_checkpoints=train_and_test_config.save_intermediate_checkpoints,
+                checkpoint_every_n_epochs=train_and_test_config.checkpoint_every_n_epochs,
+                checkpoint_save_top_k=train_and_test_config.checkpoint_save_top_k,
+                resume_checkpoint_path=train_and_test_config.resume_checkpoint_path,
+                test_mode=train_and_test_config.test_mode,
+                class_weight_only=train_and_test_config.class_weight_only,
             )
 
-            # Auto-detect generated checkpoint for visualization
-            if run_visualize_data and not checkpoint_path:
-                checkpoint_dir = OUTPUT_DIR / exp_name / run_name / "checkpoints"
-                if checkpoint_dir.exists():
-                    checkpoint_files = list(checkpoint_dir.glob("*.ckpt"))
-                    if checkpoint_files:
-                        # Use the most recent checkpoint
-                        checkpoint_path = str(max(checkpoint_files, key=lambda p: p.stat().st_mtime))
-                        logger.info(f"Auto-detected checkpoint: {checkpoint_path}")
+            if run_visualize_data and visualize_config.checkpoint_path is None:
+                visualize_config.checkpoint_path = resolve_latest_checkpoint_path(
+                    exp_name=train_and_test_config.exp_name,
+                    run_name=train_and_test_config.run_name,
+                    output_base_dir=train_and_test_config.output_base_dir,
+                    logger=logger,
+                )
 
         if run_visualize_data:
-            if not checkpoint_path:
+            visualization_exp_config_path = visualize_config.exp_config_path
+            if run_train_and_test:
+                visualization_exp_config_path = self.config
+
+            if not visualize_config.checkpoint_path:
                 logger.warning("No checkpoint path specified and none found. Skipping visualization.")
+            elif visualization_exp_config_path is None:
+                logger.warning("No experiment config path available for visualization. Skipping visualization.")
             else:
                 self.visualize_data(
-                    model_name=model_name,
-                    exp_config_path=exp_config_path,
-                    checkpoint_path=checkpoint_path,
-                    tracking_file_path=tracking_file_path,
-                    match_id=match_id,
-                    sequence_id=sequence_id,
-                    test_mode=test_mode,
-                    viz_style=viz_style,
-                    movie_output_dir=movie_output_dir,
-                    keep_frames=keep_frames,
+                    model_name=visualize_config.model_name,
+                    exp_config_path=visualization_exp_config_path,
+                    checkpoint_path=visualize_config.checkpoint_path,
+                    tracking_file_path=visualize_config.tracking_file_path,
+                    match_id=visualize_config.match_id,
+                    sequence_id=visualize_config.sequence_id,
+                    test_mode=visualize_config.test_mode,
+                    viz_style=visualize_config.viz_style,
+                    movie_output_dir=visualize_config.movie_output_dir,
+                    keep_frames=visualize_config.keep_frames,
                 )
 
         # Restore original paths
@@ -805,12 +752,15 @@ class rlearn_model_soccer:
 
 
 if __name__ == "__main__":
-    pass
+    # pass
     # rlearn_model_soccer(
     #     state_def="PVS",
     #     input_path=os.getcwd() + "/test/data/dss/preprocess_data/",
     #     output_path=os.getcwd() + "/test/data/dss/preprocess_data/split/",
-    # ).run_rlearn(run_split_train_test=True)
+    # ).run_rlearn(
+    #     run_split_train_test=True,
+    #     split_config=SplitTrainTestConfig(),
+    # )
 
     # rlearn_model_soccer(
     #     state_def="PVS",
@@ -818,35 +768,84 @@ if __name__ == "__main__":
     #     input_path=os.getcwd() + "/test/data/dss/preprocess_data/split/mini",
     #     output_path=os.getcwd() + "/test/data/dss_simple_obs_action_seq/split/mini",
     #     num_process=5,
-    # ).run_rlearn(run_preprocess_observation=True)
+    # ).run_rlearn(
+    #     run_preprocess_observation=True,
+    #     preprocess_config=PreprocessObservationConfig(),
+    # )
 
+    # Pattern 1: initial run
     # rlearn_model_soccer(
     #     state_def="PVS",
     #     config=os.getcwd() + "/test/config/exp_config.json",
     # ).run_rlearn(
     #     run_train_and_test=True,
-    #     exp_config_path=os.getcwd() + "/test/config/exp_config.json",
-    #     exp_name="sarsa_attacker",
-    #     run_name="test",
-    #     accelerator="gpu",
-    #     devices=1,
-    #     strategy="ddp",
-    #     save_intermediate_checkpoints=True,
-    #     # resume_checkpoint_path="rlearn/sports/output/sarsa_attacker/test/checkpoints/00-1-val_loss=0.2089.ckpt", # for resuming training from a specific checkpoint
-    #     save_q_values_csv=True,
-    #     max_games_csv=1,
-    #     max_sequences_per_game_csv=5,
+    #     train_and_test_config=TrainAndTestConfig(
+    #         exp_config_path=os.getcwd() + "/test/config/exp_config.json",
+    #         exp_name="sarsa_attacker",
+    #         run_name="test",
+    #         accelerator=None,
+    #         devices=None,
+    #         strategy=None,
+    #         use_class_weights=False,
+    #         save_q_values_csv=True,
+    #         max_games_csv=1,
+    #         max_sequences_per_game_csv=5,
+    #     ),
     # )
+
+    # Pattern 2: reuse cached class weights
+    # rlearn_model_soccer(
+    #     state_def="PVS",
+    #     config=os.getcwd() + "/test/config/exp_config.json",
+    # ).run_rlearn(
+    #     run_train_and_test=True,
+    #     train_and_test_config=TrainAndTestConfig(
+    #         exp_config_path=os.getcwd() + "/test/config/exp_config.json",
+    #         exp_name="sarsa_attacker",
+    #         run_name="test",
+    #         accelerator=None,
+    #         devices=None,
+    #         strategy=None,
+    #         use_class_weights=True,
+    #         save_q_values_csv=True,
+    #         max_games_csv=1,
+    #         max_sequences_per_game_csv=5,
+    #     ),
+    # )
+
+    # Pattern 3: resume from last.ckpt
+    rlearn_model_soccer(
+        state_def="PVS",
+        config=os.getcwd() + "/test/config/exp_config.json",
+    ).run_rlearn(
+        run_train_and_test=True,
+        train_and_test_config=TrainAndTestConfig(
+            exp_config_path=os.getcwd() + "/test/config/exp_config.json",
+            exp_name="sarsa_attacker",
+            run_name="test",
+            accelerator=None,
+            devices=None,
+            strategy=None,
+            resume_checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/last.ckpt",
+            save_intermediate_checkpoints=True,
+            use_class_weights=True,
+            save_q_values_csv=True,
+            max_games_csv=1,
+            max_sequences_per_game_csv=5,
+        ),
+    )
 
     # rlearn_model_soccer(
     #     state_def="PVS",
     # ).run_rlearn(
     #     run_visualize_data=True,
-    #     model_name="exp_config",
-    #     exp_config_path=os.getcwd() + "/test/config/exp_config.json",
-    #     checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=9-step=10.ckpt",
-    #     tracking_file_path=os.getcwd() + "/test/data/dss/preprocess_data/2022100106/events.jsonl",
-    #     match_id="2022100106",
-    #     sequence_id=0,
-    #     viz_style="bar",
+    #     visualize_config=VisualizeDataConfig(
+    #         model_name="exp_config",
+    #         exp_config_path=os.getcwd() + "/test/config/exp_config.json",
+    #         checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=9-step=10.ckpt",
+    #         tracking_file_path=os.getcwd() + "/test/data/dss/preprocess_data/2022100106/events.jsonl",
+    #         match_id="2022100106",
+    #         sequence_id=0,
+    #         viz_style="bar",
+    #     ),
     # )
