@@ -1,10 +1,13 @@
-from .soccer.main_class_soccer.main import rlearn_model_soccer
-from .soccer.main_class_soccer.run_rlearn_config import (
-    PreprocessObservationConfig,
-    SplitTrainTestConfig,
-    TrainAndTestConfig,
-    VisualizeDataConfig,
-)
+try:
+    from .soccer.main_class_soccer.main import rlearn_model_soccer
+    from .soccer.main_class_soccer.run_rlearn_config import (
+        PreprocessObservationConfig,
+        SplitTrainTestConfig,
+        TrainAndTestConfig,
+        VisualizeDataConfig,
+    )
+except ImportError:
+    from rlearn.sports.soccer.main_class_soccer.main import rlearn_model_soccer
 
 
 class RLearn_Model:
@@ -77,9 +80,9 @@ if __name__ == "__main__":
     # print("Running full pipeline...")
     # RLearn_Model(
     #     state_def="PVS",
-    #     config=os.getcwd() + "/test/config/preprocessing_dssports2020.json",
-    #     input_path=os.getcwd() + "/test/data/fifawc/",
-    #     output_path=os.getcwd() + "/test/data/fifawc/split/",
+    #     config=os.getcwd() + "/test/config/preprocessing_fifawc.json",
+    #     input_path=os.getcwd() + "/test/data/fifawc/preprocess_data/",
+    #     output_path=os.getcwd() + "/test/data/fifawc/preprocess_data/split_pipeline/",
     #     num_process=5,
     # ).run_rlearn(
     #     run_split_train_test=True,
@@ -91,10 +94,10 @@ if __name__ == "__main__":
     #     train_and_test_config=TrainAndTestConfig(
     #         exp_name="sarsa_attacker",
     #         run_name="full_pipeline_test",
-    #         exp_config_path=os.getcwd() + "/test/config/exp_config.json",
-    #         accelerator="gpu",
+    #         exp_config_path=os.getcwd() + "/test/config/exp_config_fifawc.json",
+    #         accelerator="cpu",
     #         devices=1,
-    #         strategy="ddp",
+    #         strategy=None,
     #         save_q_values_csv=True,
     #         max_games_csv=1,
     #         max_sequences_per_game_csv=5,
