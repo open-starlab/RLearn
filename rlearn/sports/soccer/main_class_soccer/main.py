@@ -84,7 +84,9 @@ class rlearn_model_soccer:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         if test_mode:
-            game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if re.match(r"\d{10}", p.name)]
+            game_ids = [str(p.name) for p in Path(self.input_path).glob("*") if p.is_dir() and p.name.isdigit()]
+            if not game_ids:
+                raise ValueError(f"No game directories found under input_path: {self.input_path}")
 
             train_dataset = load_dataset(
                 "json",
@@ -241,36 +243,53 @@ class rlearn_model_soccer:
                     )
                     attacker_observation_action_sequence_in_event.append(observation_action)
 
-                attacker_observation_action_sequence.append(attacker_observation_action_sequence_in_event)
-
-        if self.state_def == "EDMS":
-            events_team = [events.team_name_attack for events in events_list]
-            for observation_action_sequence in attacker_observation_action_sequence:
-                if (
-                    observation_action_sequence
-                    and observation_action_sequence[0].observation.ego_player.team_name not in events_team
-                ):
+                if attacker_observation_action_sequence_in_event:
+                    attacker_observation_action_sequence.append(
+                        {
+                            "events": events,
+                            "sequence": attacker_observation_action_sequence_in_event,
+                        }
+                    )
+                else:
                     logger.warning(
-                        f"ego player is not attacker: {observation_action_sequence[0].observation.ego_player.team_name}"
+                        f"Skipping empty attacker observation sequence in game_id: {events.game_id}, "
+                        f"half: {events.half}, sequence_id: {events.sequence_id}, player_id: {target_player_id}."
                     )
 
-        num_attacker = len(attacker_observation_action_sequence)
+        for item in attacker_observation_action_sequence:
+            events = item["events"]
+            observation_action_sequence = item["sequence"]
+            if (
+                observation_action_sequence
+                and observation_action_sequence[0].observation.ego_player.team_name != events.team_name_attack
+            ):
+                logger.warning(
+                    f"ego player is not attacker: {observation_action_sequence[0].observation.ego_player.team_name} "
+                    f"(expected: {events.team_name_attack}) in game_id: {events.game_id}, "
+                    f"half: {events.half}, sequence_id: {events.sequence_id}."
+                )
 
         attacker_observation_action_sequence = [
             SimpleObservationActionSequence(
-                game_id=events_list[i // (num_attacker // len(events_list))].game_id,
-                half=events_list[i // (num_attacker // len(events_list))].half,
-                sequence_id=events_list[i // (num_attacker // len(events_list))].sequence_id,
-                team_name_attack=events_list[i // (num_attacker // len(events_list))].team_name_attack,
-                team_name_defense=events_list[i // (num_attacker // len(events_list))].team_name_defense,
-                sequence=observation_action_sequence,
+                game_id=item["events"].game_id,
+                half=item["events"].half,
+                sequence_id=item["events"].sequence_id,
+                team_name_attack=item["events"].team_name_attack,
+                team_name_defense=item["events"].team_name_defense,
+                sequence=item["sequence"],
             ).to_dict()
-            for i, observation_action_sequence in enumerate(attacker_observation_action_sequence)
+            for item in attacker_observation_action_sequence
         ]
 
-        assert len(attacker_observation_action_sequence) <= len(events_list) * num_attacker, (
-            f"len(attacker_observation_action_sequence): {len(attacker_observation_action_sequence)} (len(events_list): {len(events_list)})"
-        )
+        if not attacker_observation_action_sequence:
+            return {
+                "game_id": [],
+                "half": [],
+                "sequence_id": [],
+                "team_name_attack": [],
+                "team_name_defense": [],
+                "sequence": [],
+            }
 
         return {
             key: [item[key] for item in attacker_observation_action_sequence]
@@ -524,7 +543,7 @@ class rlearn_model_soccer:
         keep_frames=True,
     ):
         exp_config = load_json(exp_config_path)
-        test_file_path = Path(os.getcwd() + "/" + exp_config["dataset"]["test_filename"])
+        test_file_path = Path(exp_config["dataset"]["test_filename"]).resolve()
         test_dataset = load_from_disk(test_file_path)
         test_dataset = DataModule.by_name(exp_config["datamodule"]["type"]).preprocess_data(
             test_dataset, self.state_def, **exp_config["dataset"]["preprocess_config"]
@@ -752,11 +771,11 @@ class rlearn_model_soccer:
 
 
 if __name__ == "__main__":
-    # pass
+    pass
     # rlearn_model_soccer(
     #     state_def="PVS",
-    #     input_path=os.getcwd() + "/test/data/dss/preprocess_data/",
-    #     output_path=os.getcwd() + "/test/data/dss/preprocess_data/split/",
+    #     input_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory/preprocess_data/",
+    #     output_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory/preprocess_data/split/",
     # ).run_rlearn(
     #     run_split_train_test=True,
     #     split_config=SplitTrainTestConfig(),
@@ -764,9 +783,9 @@ if __name__ == "__main__":
 
     # rlearn_model_soccer(
     #     state_def="PVS",
-    #     config=os.getcwd() + "/test/config/preprocessing_dssports2020.json",
-    #     input_path=os.getcwd() + "/test/data/dss/preprocess_data/split/mini",
-    #     output_path=os.getcwd() + "/test/data/dss_simple_obs_action_seq/split/mini",
+    #     config=os.getcwd() + "/test/config/preprocessing_datafactory.json",
+    #     input_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory/preprocess_data/split/mini",
+    #     output_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory_simple_obs_action_seq/split/mini",
     #     num_process=5,
     # ).run_rlearn(
     #     run_preprocess_observation=True,
@@ -814,26 +833,26 @@ if __name__ == "__main__":
     # )
 
     # Pattern 3: resume from last.ckpt
-    rlearn_model_soccer(
-        state_def="PVS",
-        config=os.getcwd() + "/test/config/exp_config.json",
-    ).run_rlearn(
-        run_train_and_test=True,
-        train_and_test_config=TrainAndTestConfig(
-            exp_config_path=os.getcwd() + "/test/config/exp_config.json",
-            exp_name="sarsa_attacker",
-            run_name="test",
-            accelerator=None,
-            devices=None,
-            strategy=None,
-            resume_checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/last.ckpt",
-            save_intermediate_checkpoints=True,
-            use_class_weights=True,
-            save_q_values_csv=True,
-            max_games_csv=1,
-            max_sequences_per_game_csv=5,
-        ),
-    )
+    # rlearn_model_soccer(
+    #     state_def="PVS",
+    #     config=os.getcwd() + "/test/config/exp_config.json",
+    # ).run_rlearn(
+    #     run_train_and_test=True,
+    #     train_and_test_config=TrainAndTestConfig(
+    #         exp_config_path=os.getcwd() + "/test/config/exp_config.json",
+    #         exp_name="sarsa_attacker",
+    #         run_name="test",
+    #         accelerator=None,
+    #         devices=None,
+    #         strategy=None,
+    #         resume_checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/last.ckpt",
+    #         save_intermediate_checkpoints=True,
+    #         use_class_weights=True,
+    #         save_q_values_csv=True,
+    #         max_games_csv=1,
+    #         max_sequences_per_game_csv=5,
+    #     ),
+    # )
 
     # rlearn_model_soccer(
     #     state_def="PVS",
@@ -843,8 +862,8 @@ if __name__ == "__main__":
     #         model_name="exp_config",
     #         exp_config_path=os.getcwd() + "/test/config/exp_config.json",
     #         checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=9-step=10.ckpt",
-    #         tracking_file_path=os.getcwd() + "/test/data/dss/preprocess_data/2022100106/events.jsonl",
-    #         match_id="2022100106",
+    #         tracking_file_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory/preprocess_data/0001/events.jsonl",
+    #         match_id="0001",
     #         sequence_id=0,
     #         viz_style="bar",
     #     ),
