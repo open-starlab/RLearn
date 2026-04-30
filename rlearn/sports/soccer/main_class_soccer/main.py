@@ -771,11 +771,11 @@ class rlearn_model_soccer:
 
 
 if __name__ == "__main__":
-    # pass
+    pass
     # rlearn_model_soccer(
     #     state_def="PVS",
-    #     input_path=os.getcwd() + "/test/data/dss/preprocess_data/",
-    #     output_path=os.getcwd() + "/test/data/dss/preprocess_data/split/",
+    #     input_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory/preprocess_data/",
+    #     output_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory/preprocess_data/split/",
     # ).run_rlearn(
     #     run_split_train_test=True,
     #     split_config=SplitTrainTestConfig(),
@@ -783,9 +783,9 @@ if __name__ == "__main__":
 
     # rlearn_model_soccer(
     #     state_def="PVS",
-    #     config=os.getcwd() + "/test/config/preprocessing_dssports2020.json",
-    #     input_path=os.getcwd() + "/test/data/dss/preprocess_data/split/mini",
-    #     output_path=os.getcwd() + "/test/data/dss_simple_obs_action_seq/split/mini",
+    #     config=os.getcwd() + "/test/config/preprocessing_datafactory.json",
+    #     input_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory/preprocess_data/split/mini",
+    #     output_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory_simple_obs_action_seq/split/mini",
     #     num_process=5,
     # ).run_rlearn(
     #     run_preprocess_observation=True,
@@ -833,26 +833,26 @@ if __name__ == "__main__":
     # )
 
     # Pattern 3: resume from last.ckpt
-    rlearn_model_soccer(
-        state_def="PVS",
-        config=os.getcwd() + "/test/config/exp_config.json",
-    ).run_rlearn(
-        run_train_and_test=True,
-        train_and_test_config=TrainAndTestConfig(
-            exp_config_path=os.getcwd() + "/test/config/exp_config.json",
-            exp_name="sarsa_attacker",
-            run_name="test",
-            accelerator=None,
-            devices=None,
-            strategy=None,
-            resume_checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/last.ckpt",
-            save_intermediate_checkpoints=True,
-            use_class_weights=True,
-            save_q_values_csv=True,
-            max_games_csv=1,
-            max_sequences_per_game_csv=5,
-        ),
-    )
+    # rlearn_model_soccer(
+    #     state_def="PVS",
+    #     config=os.getcwd() + "/test/config/exp_config.json",
+    # ).run_rlearn(
+    #     run_train_and_test=True,
+    #     train_and_test_config=TrainAndTestConfig(
+    #         exp_config_path=os.getcwd() + "/test/config/exp_config.json",
+    #         exp_name="sarsa_attacker",
+    #         run_name="test",
+    #         accelerator=None,
+    #         devices=None,
+    #         strategy=None,
+    #         resume_checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/last.ckpt",
+    #         save_intermediate_checkpoints=True,
+    #         use_class_weights=True,
+    #         save_q_values_csv=True,
+    #         max_games_csv=1,
+    #         max_sequences_per_game_csv=5,
+    #     ),
+    # )
 
     # rlearn_model_soccer(
     #     state_def="PVS",
@@ -862,8 +862,8 @@ if __name__ == "__main__":
     #         model_name="exp_config",
     #         exp_config_path=os.getcwd() + "/test/config/exp_config.json",
     #         checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=9-step=10.ckpt",
-    #         tracking_file_path=os.getcwd() + "/test/data/dss/preprocess_data/2022100106/events.jsonl",
-    #         match_id="2022100106",
+    #         tracking_file_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory/preprocess_data/0001/events.jsonl",
+    #         match_id="0001",
     #         sequence_id=0,
     #         viz_style="bar",
     #     ),

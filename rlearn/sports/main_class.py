@@ -26,8 +26,8 @@ if __name__ == "__main__":
     # test split_data
     # RLearn_Model(
     #     state_def="PVS",
-    #     input_path=os.getcwd() + "/test/data/dss/",
-    #     output_path=os.getcwd() + "/test/data/dss/split/",
+    #     input_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory/preprocess_data/",
+    #     output_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory/preprocess_data/split/",
     # ).run_rlearn(
     #     run_split_train_test=True,
     #     split_config=SplitTrainTestConfig(),
@@ -36,9 +36,9 @@ if __name__ == "__main__":
     # # test preprocess observation data
     # RLearn_Model(
     #     state_def="PVS",
-    #     config=os.getcwd() + "/test/config/preprocessing_dssports2020.json",
-    #     input_path=os.getcwd() + "/test/data/dss/split/mini",
-    #     output_path=os.getcwd() + "/test/data/dss_simple_obs_action_seq/split/mini",
+    #     config=os.getcwd() + "/test/config/preprocessing_datafactory.json",
+    #     input_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory/preprocess_data/split/mini",
+    #     output_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory_simple_obs_action_seq/split/mini",
     #     num_process=5,
     # ).run_rlearn(
     #     run_preprocess_observation=True,
@@ -67,8 +67,8 @@ if __name__ == "__main__":
     #         model_name="exp_config",
     #         exp_config_path=os.getcwd() + "/test/config/exp_config.json",
     #         checkpoint_path=os.getcwd() + "/rlearn/sports/output/sarsa_attacker/test/checkpoints/epoch=1-step=2.ckpt",
-    #         tracking_file_path=os.getcwd() + "/test/data/dss/preprocess_data/2022100106/events.jsonl",
-    #         match_id="2022100106",
+    #         tracking_file_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory/preprocess_data/0001/events.jsonl",
+    #         match_id="0001",
     #         sequence_id=0,
     #     ),
     # )
@@ -80,9 +80,9 @@ if __name__ == "__main__":
     # print("Running full pipeline...")
     # RLearn_Model(
     #     state_def="PVS",
-    #     config=os.getcwd() + "/test/config/preprocessing_fifawc.json",
-    #     input_path=os.getcwd() + "/test/data/fifawc/preprocess_data/",
-    #     output_path=os.getcwd() + "/test/data/fifawc/preprocess_data/split_pipeline/",
+    #     config=os.getcwd() + "/test/config/preprocessing_datafactory.json",
+    #     input_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory/preprocess_data/",
+    #     output_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory/preprocess_data/split_pipeline/",
     #     num_process=5,
     # ).run_rlearn(
     #     run_split_train_test=True,
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     #     train_and_test_config=TrainAndTestConfig(
     #         exp_name="sarsa_attacker",
     #         run_name="full_pipeline_test",
-    #         exp_config_path=os.getcwd() + "/test/config/exp_config_fifawc.json",
+    #         exp_config_path=os.getcwd() + "/test/config/exp_config_datafactory.json",
     #         accelerator="cpu",
     #         devices=1,
     #         strategy=None,
@@ -104,8 +104,8 @@ if __name__ == "__main__":
     #     ),
     #     visualize_config=VisualizeDataConfig(
     #         model_name="exp_config",
-    #         tracking_file_path=os.getcwd() + "/test/data/fifawc/preprocess_data/3812/events.jsonl",
-    #         match_id="3812",
+    #         tracking_file_path=os.getcwd() + "/test/sports/rlearn_data/data/datafactory/preprocess_data/0001/events.jsonl",
+    #         match_id="0001",
     #         sequence_id=0,
     #     ),
     # )
